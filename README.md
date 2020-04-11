@@ -6,6 +6,6 @@ collect_img : 폴더안에 있는 모든 이미지를 한 폴더로 모아준다
 --input : input folder 
 --output : output folder
 
-landmark_detect : landmark와 crop된 이미지를 저장
+generate_trainingdata : landmark와 이미지를 저장
 --input : input folder 
 --output : output folder
