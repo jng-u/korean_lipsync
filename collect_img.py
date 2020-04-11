@@ -1,7 +1,7 @@
-import glob
 import os
-import argparse
+import glob
 import shutil
+import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--input', dest='input_folder', type=str)

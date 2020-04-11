@@ -1,10 +1,8 @@
 import os
-import sys
-import math
+import glob
 import dlib
 import cv2
 import numpy as np
-import glob
 import argparse
 
 detector = dlib.get_frontal_face_detector()
@@ -40,24 +38,9 @@ def shape_to_np(shape, dtype="int"):
     # return the list of (x, y)-coordinates
     return coords
 
-def masked_histogram_equalization(img, mask):
-    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-    cnt=0
-    elems = []
-    for y in range(gray.shape[0]):
-        for x in range(gray.shape[1]):
-            if mask[y, x] != 0:
-                elems.insert(cnt, gray[y, x])
-                cnt += 1
-    hist, bins = np.histogram(elems, 256, [0, 256])
-    cdf = hist.cumsum()
-    cdf_m = np.ma.masked_equal(cdf,0)
-    cdf_m = (cdf_m - cdf_m.min())*255/(cdf_m.max()-cdf_m.min())
-    
-    cdf = np.ma.filled(cdf_m,0).astype('uint8')
-    return cdf[gray]
+err_list = []
 
-file_list = glob.glob(input_folder+'**/*.*', recursive=True)
+file_list = glob.glob(input_folder+'/**/*.*', recursive=True)
 for file in file_list:
     print("reading file: %s" % file)
     img = cv2.imread(file)
@@ -74,6 +57,7 @@ for file in file_list:
     rects = detector(adaptive, 1)
     if len(rects) == 0:
         print("error finding face at file: %s" % file)
+        err_list.insert(len(err_list), file)
         continue
     
     # 얼굴이 하나임을 가정
@@ -89,8 +73,11 @@ for file in file_list:
     
     ##### make landmark image and training image
     landmark = np.zeros(img.shape[:2])
-    cv2.polylines(landmark, [under_shape], False, (255, 255, 255), 2)
-    cv2.polylines(landmark, [outer_lip], True, (255, 255, 255), 2)
-    cv2.polylines(landmark, [inner_lip], True, (255, 255, 255), 2)
+    cv2.polylines(landmark, [under_shape], False, (255, 255, 255), 1)
+    cv2.polylines(landmark, [outer_lip], True, (255, 255, 255), 1)
+    cv2.polylines(landmark, [inner_lip], True, (255, 255, 255), 1)
 
     cv2.imwrite(output_folder+'/{}'.format(os.path.basename(file)) , landmark)
+
+print('<<error file list>>')
+print(err_list)

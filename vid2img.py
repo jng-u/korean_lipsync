@@ -1,7 +1,7 @@
+import os
+import glob
 import cv2
 import numpy as np
-import glob
-import os
 import argparse
 
 parser = argparse.ArgumentParser()
