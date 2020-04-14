@@ -117,6 +117,7 @@ for file in file_list:
         y1 /=len(lines)
         y2 /=len(lines)
         cv2.line(tooth_landmark, (mx+int(x1), my+int(y1)),(mx+int(x2), my+int(y2)), 255, 1)
+        # cv2.line(img, (mx+int(x1), my+int(y1)),(mx+int(x2), my+int(y2)), 255, 1)
 
     mask = np.zeros(landmark.shape[:2], dtype=np.uint8)
     cv2.fillPoly(mask, [inner_lip], 255)

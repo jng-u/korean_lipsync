@@ -13,15 +13,16 @@ input_folder = args.input_folder
 output_folder = args.output_folder
 os.makedirs(output_folder, exist_ok=True)
 
-ratio = 1/3
-
 cnt=0
 file_list = glob.glob(input_folder+'/**/*.*', recursive=True)
 file_list.sort()
 for file in file_list:
     print("reading file: %s" % file)
     img = cv2.imread(file)
-    img = cv2.resize(img, None, fx=ratio, fy=ratio)
+    h = img.shape[0]
+    if h > 360:
+        ratio = 360/h
+        img = cv2.resize(img, None, fx=ratio, fy=ratio)
 
     flip = cv2.flip(img, 1)
 
