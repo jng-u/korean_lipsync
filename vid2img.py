@@ -13,14 +13,15 @@ input_folder = args.input_folder
 output_folder = args.output_folder
 os.makedirs(output_folder, exist_ok=True)
 
-WANTED_FPS = 12
+WANTED_FPS = 10
 
 vidlist = glob.glob('{}/**/*.*'.format(input_folder), recursive=True)
 for vid in vidlist:
     cap = cv2.VideoCapture(vid)
     fps = cap.get(cv2.CAP_PROP_FPS)
     f = int(fps/WANTED_FPS)
-    
+    print(fps)
+    print(f)
     print('start %s' %vid)
     cnt=0
     while True:

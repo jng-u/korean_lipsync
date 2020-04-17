@@ -41,6 +41,7 @@ def shape_to_np(shape, dtype="int"):
 err_list = []
 
 file_list = glob.glob(input_folder+'/**/*.*', recursive=True)
+file_list.sort()
 for file in file_list:
     print("reading file: %s" % file)
     img = cv2.imread(file)

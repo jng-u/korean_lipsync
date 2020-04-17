@@ -24,13 +24,13 @@ for file in file_list:
         ratio = 360/h
         img = cv2.resize(img, None, fx=ratio, fy=ratio)
 
-    flip = cv2.flip(img, 1)
+    # flip = cv2.flip(img, 1)
 
-    (h, w) = img.shape[:2]
-    rotate_matrix = cv2.getRotationMatrix2D((w/2, h/2), 15, 1)
-    rotate = cv2.warpAffine(img, rotate_matrix, tuple(np.flip(img.shape[:2])))
+    # (h, w) = img.shape[:2]
+    # rotate_matrix = cv2.getRotationMatrix2D((w/2, h/2), 15, 1)
+    # rotate = cv2.warpAffine(img, rotate_matrix, tuple(np.flip(img.shape[:2])))
 
-    rotate_flip = cv2.flip(rotate, 1)
+    # rotate_flip = cv2.flip(rotate, 1)
 
     # cv2.imshow('aa', rotate)
     # cv2.imshow('aas', flip)
@@ -39,8 +39,9 @@ for file in file_list:
     #     if(cv2.waitKey(10) != -1):
     #         break
     
-    cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4) , img)
-    cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+1) , flip)
-    cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+2) , rotate)
-    cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+3) , rotate_flip)
+    # cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4) , img)
+    # cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+1) , flip)
+    # cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+2) , rotate)
+    # cv2.imwrite(output_folder+'/{}.jpg'.format(cnt*4+3) , rotate_flip)
+    cv2.imwrite(output_folder+'/{}.jpg'.format(cnt) , img)
     cnt += 1
