@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import glob
 import argparse
+import matplotlib.pyplot as plt
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--input', dest='input_folder', type=str)
@@ -27,10 +28,9 @@ def to_shape(file, dtype='int'):
     return coords
 
 def translate(start, end, duration):
-    landmark = np.zeros(shape=(256,256))
     shape = np.zeros(shape=(20, 2), dtype='int')
     for iter in range(duration+1):
-        landmark = np.zeros(shape=(256,256))
+        landmark = np.zeros(shape=(256,256), dtype='uint8')
         for i in range(len(start)):
             shape[i] = (start[i][0] + int((end[i][0]-start[i][0])*iter/duration), start[i][1] + int((end[i][1]-start[i][1])*iter/duration))
         cv2.polylines(landmark, [shape[:12]], True, (255, 255, 255), 2)
@@ -40,7 +40,7 @@ def translate(start, end, duration):
 # flist = glob.glob(input_folder+'/**/*.txt', recursive=True)
 # for file in flist:
     # print("reading file: %s" % file)
-start = open('data/trans/land/landmark/248.jpg.txt', 'r')
+start = open('data/trans/land/landmark/34.jpg.txt', 'r')
 end = open('data/trans/land/landmark/196.jpg.txt', 'r')
 
 start = to_shape(start)
@@ -48,11 +48,22 @@ end = to_shape(end)
 
 ls = translate(start, end, 10)
 
-for landmark in ls:
-    cv2.imshow('landmark', landmark)
-    while(True):
-        if(cv2.waitKey(10) != -1):
-            break
+fig = plt.figure(figsize=(11, 2))
+axs = fig.subplots(ncols=11)
+for i, land in enumerate(ls):
+    land = cv2.cvtColor(land, cv2.COLOR_GRAY2RGB)
+    axs[i].imshow(land)
+    axs[i].set_title(i)
+    axs[i].axis('off')
+fig.savefig('data/trans/test/000.png')
+plt.show()
+plt.close()
+
+# for landmark in ls:
+#     cv2.imshow('landmark', landmark)
+#     while(True):
+#         if(cv2.waitKey(10) != -1):
+#             break
 
 
 # wpath = output_folder+file[len(input_folder):]

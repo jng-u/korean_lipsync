@@ -96,22 +96,19 @@ for file in file_list:
     
     ##### make landmark image and training image
     (x, y, w, h) = get_rect(under_shape)
-    landmark_img = np.zeros((h, w))
     # for s in under_shape:
     #     s -= [x, y]
     for s in outer_mouth_shape:
         s -= [x, y]
     for s in inner_mouth_shape:
         s -= [x, y]
+    # landmark_img = np.zeros((h, w))
     # cv2.polylines(landmark_img, [under_shape], False, (255, 255, 255), 2)
     # cv2.polylines(landmark_img, [outer_mouth_shape], True, (255, 255, 255), 1)
     # cv2.polylines(landmark_img, [inner_mouth_shape], True, (255, 255, 255), 1)
 
     # masking underface
     croped_img = rotated_img[y:y+h, x:x+w]
-    # mask = np.zeros((h, w), dtype=np.uint8)
-    # cv2.fillPoly(mask, [under_shape], 255)
-    # masked_img = cv2.bitwise_and(croped_img, croped_img, mask=mask)
 
     ratio = [256/w, 256/h]
     outer_mouth_shape[:,0] = np.dot(outer_mouth_shape[:,0], 256/w)
