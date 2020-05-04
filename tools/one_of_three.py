@@ -24,4 +24,4 @@ for i, file in enumerate(file_list):
 
     # wpath = output_folder+file[len(input_folder):]
     # os.makedirs(os.path.dirname(wpath), exist_ok=True)
-    cv2.imwrite(output_folder+os.path.basename(file), img)
+    cv2.imwrite(output_folder+'/{}'.format(os.path.basename(file)), img)

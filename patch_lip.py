@@ -17,7 +17,7 @@ parser.add_argument('--output', dest='output_folder', type=str)
 args = parser.parse_args()
 
 source_folder = args.source_folder
-target_file = args.target_folder
+target_folder = args.target_folder
 output_folder = args.output_folder
 
 def get_rect(shape):
@@ -73,7 +73,7 @@ def get_rotate_point(pivot, rotate_matrix, point_list):
         rotated_point[i] = pivot + np.dot(rotate_matrix, point_list[i]-pivot)
     return rotated_point
 
-def patch_lip(source, target):    
+def patch_lip(source, target, target_shape):    
     shape = get_face(source)
     if shape is None:
         return None
@@ -88,6 +88,8 @@ def patch_lip(source, target):
     w = math.sqrt(vw[0]**2+vw[1]**2)
     h = abs(np.dot(vh, vwp)/math.sqrt(vwp[0]**2+vwp[1]**2))
     target = cv2.resize(target, None, fx=w/256, fy=h/256)
+    target_shape[:, 0] = target_shape[:, 0]*w/256
+    target_shape[:, 1] = target_shape[:, 1]*h/256
 
     # 타겟이미지를 source이미지의 크기만큼 span한다
     under_shape = shape[2:15]
@@ -95,10 +97,13 @@ def patch_lip(source, target):
 
     (x, y, w, h) = get_rect(outer_mouth_shape)
     span_target = np.zeros(shape=source.shape, dtype='uint8')
-    span_target[p1[1]:p1[1]+target.shape[0], p1[0]:p1[0]+target.shape[1]] = target
+    cp = (int((shape[57][0]+shape[51][0])/2), int((shape[57][1]+shape[51][1])/2))
+    ctp = (int((target_shape[3][0]+target_shape[9][0])/2), int((target_shape[3][1]+target_shape[9][1])/2))
+    span_target[cp[1]-ctp[1]:cp[1]-ctp[1]+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
     
     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
-    rotate_matrix = cv2.getRotationMatrix2D((tuple(shape[2])), -get_rotate_angle(shape[2], shape[14]), 1)
+    angle = get_rotate_angle(target_shape[0], target_shape[6]) - get_rotate_angle(shape[48], shape[54])
+    rotate_matrix = cv2.getRotationMatrix2D((tuple(shape[51])), angle, 1)
     span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
     
     # 소스이미지에서 합성하고싶은 만큼의 크기를 정한다.
@@ -179,21 +184,42 @@ def patch_lip(source, target):
     copy = cv2.add(span_target, copy)
     return copy
 
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+out = cv2.VideoWriter(output_folder+'/test.avi', fourcc, 10.0, (1280, 720))
+
 source_list = glob.glob(source_folder+'/**/*.*', recursive=True)
-for file in source_list:
+source_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
+target_list = glob.glob(target_folder+'/**/*.*', recursive=True)
+target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
+for i, file in enumerate(source_list):
     print("reading file: %s" % file)
     source = cv2.imread(file)
-    target = cv2.imread('data/patch/land/img/12.jpg')
-
-    dst = patch_lip(source, target)
-
+    target = cv2.imread(target_list[i])
+    target_shape = np.zeros((20, 2), dtype='int')
+    f = open(os.path.dirname(target_list[i])+'/../landmark/{}.txt'.format(os.path.basename(target_list[i])[:len(os.path.basename(target_list[i]))-4]), 'r')
+    idx=0
+    while True:
+        line = f.readline()
+        if not line: break
+        p = line.split(' ')
+        target_shape[idx] = (p[0], p[1])
+        idx+=1
+    f.close()
+    
+    dst = patch_lip(source, target, target_shape)
     # wpath = output_folder+file[len(input_folder):]
     # os.makedirs(os.path.dirname(wpath), exist_ok=True)
 
-    cv2.imwrite(output_folder+'/{}'.format(os.path.basename(file)) , dst)
+    dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
+    dst = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)
+
+    out.write(dst)
+    cv2.imwrite(output_folder+'/img/{}'.format(os.path.basename(file)) , dst)
     # cv2.imshow('source', source)
     # cv2.imshow('target', target)
     # cv2.imshow('copy', dst)
     # while(True):
     #     if(cv2.waitKey(10) != -1):
     #         break
+out.release()
+cv2.destroyAllWindows()
