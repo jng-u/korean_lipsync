@@ -19,6 +19,8 @@ args = parser.parse_args()
 source_folder = args.source_folder
 target_folder = args.target_folder
 output_folder = args.output_folder
+os.makedirs(output_folder, exist_ok=True)
+os.makedirs(output_folder+'/img', exist_ok=True)
 
 def get_rect(shape):
     xs = shape[:, 0]
@@ -73,6 +75,9 @@ def get_rotate_point(pivot, rotate_matrix, point_list):
         rotated_point[i] = pivot + np.dot(rotate_matrix, point_list[i]-pivot)
     return rotated_point
 
+def middle_point(s, e):
+    return (int((s[0]+e[0])/2), int((s[1]+e[1])/2))
+
 def patch_lip(source, target, target_shape):    
     shape = get_face(source)
     if shape is None:
@@ -97,12 +102,21 @@ def patch_lip(source, target, target_shape):
 
     (x, y, w, h) = get_rect(outer_mouth_shape)
     span_target = np.zeros(shape=source.shape, dtype='uint8')
-    cp = (int((shape[57][0]+shape[51][0])/2), int((shape[57][1]+shape[51][1])/2))
-    ctp = (int((target_shape[3][0]+target_shape[9][0])/2), int((target_shape[3][1]+target_shape[9][1])/2))
+    # cp = (int((shape[57][0]+shape[51][0])/2), int((shape[57][1]+shape[51][1])/2))
+    # ctp = (int((target_shape[3][0]+target_shape[9][0])/2), int((target_shape[3][1]+target_shape[9][1])/2))
+    cp = middle_point(shape[57], shape[51])
+    ctp = middle_point(target_shape[3], target_shape[9])
     span_target[cp[1]-ctp[1]:cp[1]-ctp[1]+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
     
     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
-    angle = get_rotate_angle(target_shape[0], target_shape[6]) - get_rotate_angle(shape[48], shape[54])
+    # rp1 = (int((shape[49][0]+shape[59][0])/2), int((shape[49][1]+shape[59][1])/2))
+    # rp2 = (int((shape[53][0]+shape[55][0])/2), int((shape[53][1]+shape[55][1])/2))
+    rp1 = middle_point(shape[49], shape[59])
+    rp2 = middle_point(shape[53], shape[55])
+    rp1 = middle_point(rp1, shape[48])
+    rp2 = middle_point(rp2, shape[54])
+    # angle = get_rotate_angle(target_shape[0], target_shape[6]) - get_rotate_angle(shape[48], shape[54])
+    angle = get_rotate_angle(target_shape[0], target_shape[6]) - get_rotate_angle(rp1, rp2)
     rotate_matrix = cv2.getRotationMatrix2D((tuple(shape[51])), angle, 1)
     span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
     
@@ -194,9 +208,11 @@ target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basen
 for i, file in enumerate(source_list):
     print("reading file: %s" % file)
     source = cv2.imread(file)
-    target = cv2.imread(target_list[i])
+    # target = cv2.imread(target_list[i])
+    target = cv2.imread('../data/ann2land/img/424.jpg')
     target_shape = np.zeros((20, 2), dtype='int')
-    f = open(os.path.dirname(target_list[i])+'/../landmark/{}.txt'.format(os.path.basename(target_list[i])[:len(os.path.basename(target_list[i]))-4]), 'r')
+    # f = open(os.path.dirname(target_list[i])+'/../landmark/{}.txt'.format(os.path.basename(target_list[i])[:len(os.path.basename(target_list[i]))-4]), 'r')
+    f = open('../data/ann2land/landmark/424.jpg.txt', 'r')
     idx=0
     while True:
         line = f.readline()
