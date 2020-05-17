@@ -147,17 +147,19 @@ def patch_lip(source, target, target_shape):
     # copy = cv2.cvtColor(copy, cv2.COLOR_BGR2BGRA)
     # span_target = cv2.cvtColor(span_target, cv2.COLOR_BGR2BGRA)
 
-    points = get_points_inline(shape[2:15])
-    for p in points:
-        x=p[0]
-        y=p[1]
-        while all(k==0 for k in copy[y][x]):
-            y+=1
-        while True:
-            if any(k!=0 for k in copy[y-1][x]):
-                break
-            copy[y][x] = copy[y+1][x]
-            y-=1
+
+    # fill Gap
+    # points = get_points_inline(shape[2:15])
+    # for p in points:
+    #     x=p[0]
+    #     y=p[1]
+    #     while all(k==0 for k in copy[y][x]):
+    #         y+=1
+    #     while True:
+    #         if any(k!=0 for k in copy[y-1][x]):
+    #             break
+    #         copy[y][x] = copy[y+1][x]
+    #         y-=1
 
     # (x, y, w, h) = get_rect(under_shape)
     
@@ -176,48 +178,77 @@ def patch_lip(source, target, target_shape):
     copy = cv2.add(span_target, copy)
     return copy
 
-# fourcc = cv2.VideoWriter_fourcc(*'XVID')
-# out = cv2.VideoWriter(output_folder+'/test.avi', fourcc, 10.0, (1280, 720))
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+# original = cv2.VideoWriter(output_folder+'/original.avi', fourcc, 10.0, (1280, 720))
+# out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 10.0, (1280, 720))
+out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 10.0, (1280, 360))
 
 source_list = glob.glob(source_folder+'/**/*.*', recursive=True)
 source_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
-target_list = glob.glob(target_folder+'/**/*.*', recursive=True)
-target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
+# target_list = glob.glob(target_folder+'/**/*.*', recursive=True)
+# target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
 for i, file in enumerate(source_list):
     print("reading file: %s" % file)
-    source = cv2.imread('../data/ann/400.jpg')
+    source = cv2.imread(file)
     # target = cv2.imread(target_list[i])
-    target = cv2.imread('../data/ann/435.jpg')
-    
-    shape = get_face(target)
+    target = cv2.imread('../data/ann2land/img/424.jpg')
+    under_shape = np.zeros((14, 2), dtype='int')
 
-    p1 = shape[2]
-    p2 = shape[14]
-    angle = get_rotate_angle(p1, p2)
-    rotate_matrix = cv2.getRotationMatrix2D((tuple(p1)), angle, 1)
-    target = cv2.warpAffine(target, rotate_matrix, tuple(np.flip(target.shape[:2])))
-    rotated_shape = get_rotate_point(p1, rotate_matrix[:, :2], shape)
-    (x, y, w, h) = get_rect(rotated_shape[2:15])
+    f = open('../data/ann2land/txt/424.txt')
+    line = f.readline()
+    p = line.split(' ')
+    w = int(p[0])
+    h = int(p[1])
+    idx=0
+    while True:
+        line = f.readline()
+        if not line: break
+        p = line.split(' ')
+        under_shape[idx] = (p[0], p[1])
+        idx+=1
+    f.close()
+
+    target = cv2.resize(target, None, fx=w/256, fy=h/256)
+    under_shape[:,0] = np.dot(under_shape[:,0], w/256)
+    under_shape[:,1] = np.dot(under_shape[:,1], h/256)
+    
+    # shape = get_face(target)
+
+    # p1 = shape[2]
+    # p2 = shape[14]
+    # angle = get_rotate_angle(p1, p2)
+    # rotate_matrix = cv2.getRotationMatrix2D((tuple(p1)), angle, 1)
+    # target = cv2.warpAffine(target, rotate_matrix, tuple(np.flip(target.shape[:2])))
+    # rotated_shape = get_rotate_point(p1, rotate_matrix[:, :2], shape)
+    # (x, y, w, h) = get_rect(rotated_shape[2:15])
     # mask = np.zeros(shape=target.shape[:2], dtype='uint8')
-    under_shape = np.concatenate((rotated_shape[2:15], [middle_point(rotated_shape[51], rotated_shape[33])][0:1]), axis=0)
-    for s in under_shape:
-        s -= [x, y]
+    # under_shape = np.concatenate((rotated_shape[2:15], [middle_point(rotated_shape[51], rotated_shape[33])][0:1]), axis=0)
+    # for s in under_shape:
+    #     s -= [x, y]
     # mask = cv2.fillPoly(mask, [under_shape], (255, 255, 255))
     # target = cv2.bitwise_and(target, target, mask=mask)
-    target = target[y:y+h, x:x+w]
+    # target = target[y:y+h, x:x+w]
 
     dst = patch_lip(source, target, under_shape)
 
     dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
     dst = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)
 
+    source = cv2.resize(source, None, fx=0.5, fy=0.5)
+    dst = cv2.resize(dst, None, fx=0.5, fy=0.5)
+
+    ret = np.concatenate((source, dst), axis=1)
+
+    # original.write(source)
     # out.write(dst)
+    out.write(ret)
     # cv2.imwrite(output_folder+'/img/{}'.format(os.path.basename(file)) , dst)
-    # cv2.imshow('source', dst)
-    cv2.imshow('target', target)
-    cv2.imshow('copy', dst)
-    while(True):
-        if(cv2.waitKey(10) != -1):
-            break
-# out.release()
-# cv2.destroyAllWindows()
+    # cv2.imshow('source', ret)
+    # cv2.imshow('target', target)
+    # cv2.imshow('copy', dst)
+    # while(True):
+    #     if(cv2.waitKey(10) != -1):
+    #         break
+# original.release()
+out.release()
+cv2.destroyAllWindows()

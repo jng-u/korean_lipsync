@@ -21,6 +21,8 @@ landmark_folder = output_folder+'/landmark'
 os.makedirs(landmark_folder, exist_ok=True)
 img_folder = output_folder+'/img'
 os.makedirs(img_folder, exist_ok=True)
+landdata_folder = output_folder+'/txt'
+os.makedirs(landdata_folder, exist_ok=True)
 
 def get_rect(shape):
     xs = shape[:, 0]
@@ -54,9 +56,12 @@ def get_rotate_point(pivot, rotate_matrix, point_list):
         rotated_point[i] = pivot + np.dot(rotate_matrix, point_list[i]-pivot)
     return rotated_point
 
+def middle_point(s, e):
+    return (int(round((s[0]+e[0])/2)), int(round((s[1]+e[1])/2)))
+
 file_list = glob.glob(input_folder+'/**/*.*', recursive=True)
-for file in file_list:
-    print("reading file: %s" % file)
+for i, file in enumerate(file_list):
+    print("{} / {}".format(i+1, len(file_list)))
     img = cv2.imread(file)
 
     ##### 전처리
@@ -91,17 +96,18 @@ for file in file_list:
     rotated_shape = get_rotate_point(shape[0], rotate_matrix[:, :2], shape)    
     # under_shape = np.concatenate((rotated_shape[2:15], np.flip(rotated_shape[31:36], axis=0)), axis=0)
     under_shape = rotated_shape[2:15]
-    outer_mouth_shape = rotated_shape[48:60]
-    inner_mouth_shape = rotated_shape[60:68]
+    # outer_mouth_shape = rotated_shape[48:60]
+    # inner_mouth_shape = rotated_shape[60:68]
+    # under_shape = np.concatenate((rotated_shape[2:15], [middle_point(rotated_shape[51], rotated_shape[33])][0:1]), axis=0)
     
     ##### make landmark image and training image
     (x, y, w, h) = get_rect(under_shape)
+    for s in rotated_shape:
+        s -= [x, y]
+    # for s in inner_mouth_shape:
+    #     s -= [x, y]
     # for s in under_shape:
     #     s -= [x, y]
-    for s in outer_mouth_shape:
-        s -= [x, y]
-    for s in inner_mouth_shape:
-        s -= [x, y]
     # landmark_img = np.zeros((h, w))
     # cv2.polylines(landmark_img, [under_shape], False, (255, 255, 255), 2)
     # cv2.polylines(landmark_img, [outer_mouth_shape], True, (255, 255, 255), 1)
@@ -111,24 +117,33 @@ for file in file_list:
     croped_img = rotated_img[y:y+h, x:x+w]
 
     ratio = [256/w, 256/h]
-    outer_mouth_shape[:,0] = np.dot(outer_mouth_shape[:,0], 256/w)
-    outer_mouth_shape[:,1] = np.dot(outer_mouth_shape[:,1], 256/h)
-    inner_mouth_shape[:,0] = np.dot(inner_mouth_shape[:,0], 256/w)
-    inner_mouth_shape[:,1] = np.dot(inner_mouth_shape[:,1], 256/h)
-    # landmark_img = cv2.resize(landmark_img, None, fx=ratio[0], fy=ratio[1])
+    rotated_shape[:,0] = np.dot(rotated_shape[:,0], 256/w)
+    rotated_shape[:,1] = np.dot(rotated_shape[:,1], 256/h)
+    # inner_mouth_shape[:,0] = np.dot(inner_mouth_shape[:,0], 256/w)
+    # inner_mouth_shape[:,1] = np.dot(inner_mouth_shape[:,1], 256/h)
+    # under_shape[:,0] = np.dot(under_shape[:,0], 256/w)
+    # under_shape[:,1] = np.dot(under_shape[:,1], 256/h)
+    outer_mouth_shape = rotated_shape[48:60]
+    inner_mouth_shape = rotated_shape[60:68]
+    # under_shape = np.concatenate((rotated_shape[2:15], [middle_point(rotated_shape[51], rotated_shape[33])][0:1]), axis=0)
+
     landmark_img = np.zeros(shape=(256, 256))
     cv2.polylines(landmark_img, [outer_mouth_shape], True, (255, 255, 255), 2)
     cv2.polylines(landmark_img, [inner_mouth_shape], True, (255, 255, 255), 2)
     croped_img = cv2.resize(croped_img, None, fx=ratio[0], fy=ratio[1])
 
-
-    f = open(landmark_folder+'/{}.txt'.format(os.path.basename(file)), 'w')
-    for s in outer_mouth_shape:
+    f = open(landdata_folder+'/{}.txt'.format(os.path.basename(file)[0:len(os.path.basename(file))-4]), 'w')
+    data = '{} {}\n'.format(w, h)
+    f.write(data)
+    for s in rotated_shape:
         data = '{} {}\n'.format(s[0], s[1])
         f.write(data)
-    for s in inner_mouth_shape:
-        data = '{} {}\n'.format(s[0], s[1])
-        f.write(data)
+    # for s in outer_mouth_shape:
+    #     data = '{} {}\n'.format(s[0], s[1])
+    #     f.write(data)
+    # for s in inner_mouth_shape:
+    #     data = '{} {}\n'.format(s[0], s[1])
+    #     f.write(data)
     f.close()
 
     cv2.imwrite(landmark_folder+'/{}'.format(os.path.basename(file)) , landmark_img)
