@@ -7,16 +7,31 @@ import glob
 import argparse
 import matplotlib.pyplot as plt
 
+landmark_path = ['../data/taylor/land/txt/0.txt', \
+            '../data/taylor/land/txt/0.txt', \
+            # '../data/taylor/land/txt/1292.txt', \
+            '../data/taylor/land/txt/1425.txt', \
+            '../data/taylor/land/txt/94.txt', \
+            # '../data/taylor/land/txt/196.txt', \
+            '../data/taylor/land/5.txt', \
+            # '../data/taylor/land/txt/1541.txt', \
+            '../data/taylor/land/txt/933.txt', \
+            '../data/taylor/land/txt/0.txt', \
+            # '../data/taylor/land/txt/924.txt']
+            '../data/taylor/land/8.txt']
+
 parser = argparse.ArgumentParser()
-parser.add_argument('--input', dest='input_folder', type=str)
+parser.add_argument('--number', dest='num', type=str)
 parser.add_argument('--output', dest='output_folder', type=str)
+parser.add_argument('--iter', dest='iteration', type=int, default=10)
 args = parser.parse_args()
 
-input_folder = args.input_folder
 output_folder = args.output_folder
+os.makedirs(output_folder+'/land', exist_ok = True)
+os.makedirs(output_folder+'/txt', exist_ok = True)
 
 def to_shape(file, dtype='int'):
-    coords = np.zeros(shape=(20, 2), dtype=dtype)
+    coords = np.zeros(shape=(69, 2), dtype=dtype)
     i=0
     while True:
         line = file.readline()
@@ -28,36 +43,73 @@ def to_shape(file, dtype='int'):
     return coords
 
 def translate(start, end, duration):
-    shape = np.zeros(shape=(20, 2), dtype='int')
+    shapes = []
+    landmarks = []
     for iter in range(duration+1):
+        shape = np.zeros(shape=(69, 2), dtype='int')
         landmark = np.zeros(shape=(256,256), dtype='uint8')
         for i in range(len(start)):
-            shape[i] = (start[i][0] + int((end[i][0]-start[i][0])*iter/duration), start[i][1] + int((end[i][1]-start[i][1])*iter/duration))
-        cv2.polylines(landmark, [shape[:12]], True, (255, 255, 255), 2)
-        cv2.polylines(landmark, [shape[12:]], True, (255, 255, 255), 2)
-        yield landmark
+            shape[i] = (start[i][0] + int(round((end[i][0]-start[i][0])*iter/duration)), start[i][1] + int(round((end[i][1]-start[i][1])*iter/duration)))
+        cv2.polylines(landmark, [shape[49:61]], True, (255, 255, 255), 2)
+        cv2.polylines(landmark, [shape[61:69]], True, (255, 255, 255), 2)
+        landmarks.append(landmark)
+        shapes.append(shape)
+        # yield landmark, shape
+    return landmarks, shapes
 
-# flist = glob.glob(input_folder+'/**/*.txt', recursive=True)
-# for file in flist:
-    # print("reading file: %s" % file)
-start = open('data/trans/land/landmark/34.jpg.txt', 'r')
-end = open('data/trans/land/landmark/196.jpg.txt', 'r')
+nums = args.num
+iteration = args.iteration
+cnt=0
+for i in range(len(nums)-1):
+    s = nums[i]
+    e = nums[i+1]
+    print('{} -> {}'.format(s, e))
+    start = open(landmark_path[int(s)-1], 'r')
+    end = open(landmark_path[int(e)-1], 'r')
 
-start = to_shape(start)
-end = to_shape(end)
+    start = to_shape(start)
+    end = to_shape(end)
 
-ls = translate(start, end, 10)
+    lands, shapes = translate(start, end, iteration)
 
-fig = plt.figure(figsize=(11, 2))
-axs = fig.subplots(ncols=11)
-for i, land in enumerate(ls):
-    land = cv2.cvtColor(land, cv2.COLOR_GRAY2RGB)
-    axs[i].imshow(land)
-    axs[i].set_title(i)
-    axs[i].axis('off')
-fig.savefig('data/trans/test/000.png')
-plt.show()
-plt.close()
+    # fig = plt.figure(figsize=(13, 2))
+    # axs = fig.subplots(ncols=13)
+    if i==0:
+        land = cv2.cvtColor(lands[0], cv2.COLOR_GRAY2RGB)
+        for k in range(5):
+            cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
+            f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
+            for s in shapes[0]:
+                data = '{} {}\n'.format(s[0], s[1])
+                f.write(data)
+            f.close()
+            cnt+=1
+    for j, land in enumerate(lands):
+        if j==0: continue
+        land = cv2.cvtColor(land, cv2.COLOR_GRAY2RGB)
+        cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
+        f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
+        for s in shapes[j]:
+            data = '{} {}\n'.format(s[0], s[1])
+            f.write(data)
+        f.close()
+        cnt+=1
+        if j==len(lands)-1:
+            for k in range(4):
+                cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
+                f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
+                for s in shapes[j]:
+                    data = '{} {}\n'.format(s[0], s[1])
+                    f.write(data)
+                f.close()
+                cnt+=1
+
+        # axs[i].imshow(land)
+        # axs[i].set_title(i)
+        # axs[i].axis('off')
+    # fig.savefig('data/trans/test/000.png')
+    # plt.show()
+    # plt.close()
 
 # for landmark in ls:
 #     cv2.imshow('landmark', landmark)

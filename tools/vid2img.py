@@ -13,7 +13,7 @@ input_folder = args.input_folder
 output_folder = args.output_folder
 os.makedirs(output_folder, exist_ok=True)
 
-WANTED_FPS = 10
+WANTED_FPS = 15
 
 vidlist = glob.glob('{}/**/*.*'.format(input_folder), recursive=True)
 for vid in vidlist:
@@ -29,7 +29,7 @@ for vid in vidlist:
         if cnt%f == 0:
             if frame is None:
                 break
-            w_path = '{}/{}/'.format(output_folder, vid[len(input_folder)+1:])
+            w_path = '{}/'.format(output_folder)
             os.makedirs(w_path, exist_ok=True) 
             cv2.imwrite(w_path+'{}.jpg'.format(int(cnt/f)), frame)
         cnt+=1

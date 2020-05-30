@@ -6,6 +6,7 @@ import cv2
 import numpy as np
 import glob
 import argparse
+import matplotlib.pyplot as plt
 
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
@@ -96,162 +97,275 @@ def get_points_inline(points):
             x = (x[0]+v[0], x[1]+v[1])
     return ret
 
+def linear_reg(x, y):
+    n = len(x)
+    xmean = sum(x)/n
+    ymean = sum(y)/n
+    a1 = (n*sum([a*b for a,b in zip(x, y)]) - sum(x)*sum(y)) / (n*sum([a**2 for a in x]) - sum(x)**2)
+    a0 = ymean - a1*xmean
+    return a1, a0
+
+def curve_fitting(n, data, max_i):
+    w0 = 2 * math.pi / n 
+    x = range(0, n)
+    
+    A = np.zeros(max_i)
+    B = np.zeros(max_i)
+
+    A0 = sum(data)/n
+    for i in range(0, max_i):
+        A[i] = sum([d*math.cos((i+1)*w0*t) for d, t in zip(data, x)])*2/n
+    for i in range(0, max_i):
+        B[i] = sum([d*math.sin((i+1)*w0*t) for d, t in zip(data, x)])*2/n
+
+    ret = np.ones(n)
+    ret = np.dot(A0, ret)
+    for i in range(0, max_i):
+        ret = [r + A[i]*math.cos((i+1)*w0*t) + B[i]*math.sin((i+1)*w0*t) for r, t in zip(ret, x)]
+    return ret
+
 def patch_lip(source, shape, target, target_shape):    
-    # shape = get_face(source)
-    # if shape is None:
-    #     return None
-
     shape = np.array(shape, dtype='int')
-
     # print(shape)
 
     # rescale 타겟이미지의 크기를 소스의 얼굴 하관부분에 맞춘다.
+    p1 = shape[2]
+    p2 = shape[14]
+    # p1 = shape[48]
+    # p2 = shape[54]
+    vw = [a-b for a,b in zip(p2, p1)]
+    w = math.sqrt(vw[0]**2+vw[1]**2)
+    # tp1 = target_shape[48]
+    # tp2 = target_shape[54]
+    # tvw = [a-b for a,b in zip(tp2, tp1)]
+    # tw = math.sqrt(tvw[0]**2+tvw[1]**2)
+    # scale = w/tw
+    scale = w/target.shape[1]
+    target = cv2.resize(target, None, fx=scale, fy=scale)
+    target_shape[:,:] = target_shape[:,:]*scale
+    # background = np.copy(target)
+    # bg_shape = np.copy(target_shape)
+
+    # 타겟이미지를 source이미지의 크기만큼 span한다
+    under_shape = shape[2:15]
+
+    span_target = np.zeros(shape=source.shape, dtype='uint8')
+    (x, y, w, h) = get_rect(shape[48:60])
+    (tx, ty, tw, th) = get_rect(target_shape[48:60])
+    ctp = middle_point(target_shape[51], target_shape[57])
+    # ctp2 = middle_point(target_shape[48], target_shape[54])
+    # ctp = middle_point(ctp, ctp2)
+    # ctp = np.copy(target_shape[51])
+    ctp = (tx+int(tw/2), ty)
+    # cp = shape[33] + ctp - target_shape[33]
+    cp = (x + int(w/2), y)
+    span_target[cp[1]-ctp[1]:cp[1]-ctp[1]+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
+    # span_target[y:y+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
+    for s in target_shape:
+        s += [cp[0]-ctp[0], cp[1]-ctp[1]]
+
+    mask = np.zeros(shape=span_target.shape[:2], dtype='float')
+    (tx, ty, tw, th) = get_rect(target_shape[2:15])
+    (mx, my, mw, mh) = get_rect(target_shape[48:60])
+    padding = 10
+    (x, y, w, h) = (mx-padding, my-padding, mw+2*padding, mh+2*padding)
+    if tx>x: x=tx
+    if ty>y: y=ty
+    if x+w>x+tw: w=tw
+    if y+h>y+th: h=th
+    for i in range(y, y+h):
+        for j in range(x, x+w):
+            d=1
+            l=0
+            if i<=my and j<=mx:
+                # d=1
+                if mx-j < my-i:
+                    d = math.sqrt((j-mx)**2 + (my-y)**2)
+                else:
+                    d = math.sqrt((x-mx)**2 + (my-i)**2)
+                # d = math.sqrt((x-mx)**2 + (y-my)**2)
+                l = math.sqrt((j-mx)**2 + (i-my)**2)
+            elif i<=my and j>=mx+mw:
+                # d=1
+                if j-(mx+mw) < my-i:
+                    d = math.sqrt((j-mx-mw)**2 + (my-y)**2)
+                else:
+                    d = math.sqrt((x+w-mx-mw)**2 + (my-i)**2)
+                # d = math.sqrt((x+w-mx-mw)**2 + (y-my)**2)
+                l = math.sqrt((j-mx-mw)**2 + (i-my)**2)
+            elif i>=my+mh and j<=mx:
+                # d=1
+                if mx-j < i-(my+mh):
+                    d = math.sqrt((j-mx)**2 + (y+h-my-mh)**2)
+                else:
+                    d = math.sqrt((x-mx)**2 + (i-my-mh)**2)
+                # d = math.sqrt((x-mx)**2 + (y+h-my-mh)**2)
+                l = math.sqrt((j-mx)**2 + (i-my-mh)**2)
+            elif i>=my+mh and j>=mx+mw:
+                # d=1
+                if j-(mx+mw) < i-(my+mh):
+                    d = math.sqrt((j-mx-mw)**2 + (y+h-my-mh)**2)
+                else:
+                    d = math.sqrt((x+w-mx-mw)**2 + (i-my-mh)**2)
+                # d = math.sqrt((x+w-mx-mw)**2 + (y+h-my-mh)**2)
+                l = math.sqrt((j-mx-mw)**2 + (i-my-mh)**2)
+            elif i < my:
+                d = my - y
+                l = my - i
+            elif i > my+mh:
+                # d=1
+                d = y+h-my-mh
+                l = i-my-mh
+            elif j < mx:
+                d = mx - x
+                l = mx - j
+            elif j > mx+mw:
+                d = x+w-mx-mw
+                l = j-mx-mw
+            ca = l/d
+            ta = (d-l)/d
+            mask[i, j] = ta
+
+
     # p1 = shape[2]
     # p2 = shape[14]
-    # p3 = shape[8]
+    # p3 = target_shape[8]
     # vw = [a-b for a,b in zip(p2, p1)]
     # vh = [a-b for a,b in zip(p3, p1)]
     # vwp = [vw[1], -vw[0]]
     # w = math.sqrt(vw[0]**2+vw[1]**2)
     # h = abs(np.dot(vh, vwp)/math.sqrt(vwp[0]**2+vwp[1]**2))
-    # target = cv2.resize(target, None, fx=w/256, fy=h/256)
-    # target_shape[:, 0] = target_shape[:, 0]*w/256
-    # target_shape[:, 1] = target_shape[:, 1]*h/256
-
-    # 타겟이미지를 source이미지의 크기만큼 span한다
-    under_shape = shape[2:15]
-    outer_mouth_shape = shape[48:60]
-
-    (x, y, w, h) = get_rect(outer_mouth_shape)
-    span_target = np.zeros(shape=source.shape, dtype='uint8')
-    # cp = (int((shape[57][0]+shape[51][0])/2), int((shape[57][1]+shape[51][1])/2))
-    # ctp = (int((target_shape[3][0]+target_shape[9][0])/2), int((target_shape[3][1]+target_shape[9][1])/2))
-    cp = middle_point(shape[57], shape[51])
-    ctp = middle_point(target_shape[51], target_shape[57])
-    span_target[cp[1]-ctp[1]:cp[1]-ctp[1]+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
+    # x_scale = w/background.shape[1]
+    # y_scale = h/background.shape[0]
+    # background = cv2.resize(background, None, fx=x_scale, fy=y_scale)
+    # bg_shape[:, 0] = bg_shape[:, 0]*x_scale
+    # bg_shape[:, 1] = bg_shape[:, 1]*y_scale
     
+    # span_background = np.zeros(shape=source.shape, dtype='uint8')
+    # span_background[shape[2][1]:shape[2][1]+background.shape[0], shape[2][0]:shape[2][0]+background.shape[1]] = background
+    # for s in bg_shape:
+    #     s += [shape[2][0], shape[2][1]]
+    # under = bg_shape[2:15]
+        
+    # bg_mask = np.zeros(shape=span_background.shape[:2], dtype='float')
+    # (x, y, w, h) = get_rect(under)
+    # for i in range(y, y+h):
+    #     d = h
+    #     l = y+h - i
+    #     ta = (d-l)/d
+    #     for j in range(x, x+w):
+    #         bg_mask[i, j] = ta
+
+    copy = np.copy(source)    
+
+
     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
-    # rp1 = (int((shape[49][0]+shape[59][0])/2), int((shape[49][1]+shape[59][1])/2))
-    # rp2 = (int((shape[53][0]+shape[55][0])/2), int((shape[53][1]+shape[55][1])/2))
-    rp1 = middle_point(shape[49], shape[59])
-    rp2 = middle_point(shape[53], shape[55])
-    rp1 = middle_point(rp1, shape[48])
-    rp2 = middle_point(rp2, shape[54])
-    # angle = get_rotate_angle(target_shape[0], target_shape[6]) - get_rotate_angle(shape[48], shape[54])
-    angle = get_rotate_angle(target_shape[48], target_shape[54]) - get_rotate_angle(rp1, rp2)
-    rotate_matrix = cv2.getRotationMatrix2D((tuple(shape[51])), angle, 1)
+    # rp1 = middle_point(shape[49], shape[59])
+    # rp2 = middle_point(shape[53], shape[55])
+    # rp1 = middle_point(rp1, shape[48])
+    # rp2 = middle_point(rp2, shape[54])
+    ta1, ta0 = linear_reg(target_shape[48:68][:, 0], target_shape[48:68][:, 1])
+    trp1 = (0, ta0)
+    trp2 = (1, ta1+ta0)
+    # angle = get_rotate_angle(target_shape[48], target_shape[54]) - get_rotate_angle(rp1, rp2)
+    angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(shape[48], shape[54])
+
+    # background_rotate_mat = cv2.getRotationMatrix2D(tuple(shape[2]), -get_rotate_angle(shape[2], shape[14]), 1)
+    # span_background = cv2.warpAffine(span_background, background_rotate_mat, tuple(np.flip(span_background.shape[:2])))
+    # bg_mask = cv2.warpAffine(bg_mask, background_rotate_mat, tuple(np.flip(span_background.shape[:2])))
+    # under = get_rotate_point(tuple(shape[2]), background_rotate_mat[:, :2], under)
+
+    # under_shape = np.concatenate((shape[2:15], np.flip(under, axis=0)), axis=0)
+    # copy = cv2.fillPoly(copy, [under_shape], (0, 0, 0))
+
+    # mm = np.zeros(shape=span_background.shape[:2], dtype='uint8')
+    # mm = cv2.fillPoly(mm, [under], 255)
+    # bg_mask = cv2.bitwise_and(bg_mask, bg_mask, mask=mm)
+    # # cv2.imshow('copy', bg_mask)
+    # # while(True):
+    # #     if(cv2.waitKey(10) != -1):
+    # #         break
+    # span_background[:,:,0] = span_background[:,:,0]*bg_mask
+    # span_background[:,:,1] = span_background[:,:,1]*bg_mask
+    # span_background[:,:,2] = span_background[:,:,2]*bg_mask
+
+    # bg_mask = 1-bg_mask
+    # copy[:,:,0] = copy[:,:,0]*bg_mask
+    # copy[:,:,1] = copy[:,:,1]*bg_mask
+    # copy[:,:,2] = copy[:,:,2]*bg_mask
+    # copy = cv2.add(copy, span_background)
+
+
+    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[51]), angle, 1)
     span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
+    mask = cv2.warpAffine(mask, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
+    target_shape = get_rotate_point(tuple(shape[51]), rotate_matrix[:, :2], target_shape)
     
-    # 소스이미지에서 합성하고싶은 만큼의 크기를 정한다.
-    padding = 30
-    mask = np.zeros(shape=source.shape[:2], dtype='uint8')
-    mask[y-int(padding/2):y+h+int(padding/2), x-int(padding/2):x+w+int(padding/2)] = np.ones(shape=(h+int(padding), w+int(padding)))
-    span_target = cv2.bitwise_and(span_target, span_target, mask=mask)
+    mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
+    mask = cv2.bitwise_and(mask, mask, mask=mm)
 
-    # BGR채널을 BGRA로 바꾼다.
-    copy = np.copy(source)
-    copy = cv2.cvtColor(copy, cv2.COLOR_BGR2BGRA)
-    span_target = cv2.cvtColor(span_target, cv2.COLOR_BGR2BGRA)
+    mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    mm = cv2.fillPoly(mm, [shape[2:15]], 255)
+    mask = cv2.bitwise_and(mask, mask, mask=mm)
 
-    #합성한 이미지의 outer lip의 영역을 구한다.
+    span_target[:,:,0] = span_target[:,:,0]*mask
+    span_target[:,:,1] = span_target[:,:,1]*mask
+    span_target[:,:,2] = span_target[:,:,2]*mask
+
     mask = 1-mask
-    tmp = cv2.bitwise_and(copy, copy, mask=mask)
-    tmp = cv2.add(span_target, tmp)
-    tshape = get_face(tmp)
-    if tshape is None:
-        return None
-    tx, ty, tw, th = get_rect(tshape[48:60])
-    
-    # alpha 를 가장자리쪽으로 가면 크게하여 합성을 자연스럽게 한다.
-    for i in range(y-int(padding/2), y+h+int(padding/2)):
-        for j in range(x-int(padding/2), x+w+int(padding/2)):
-                ca = 1
-                ta = 1
-                if i < ty:
-                    l = ty - (y-int(padding/2))
-                    d = ty - i
-                    if j < tx:
-                        if tx - j > d:
-                            l = tx - (x-int(padding/2))
-                            d = tx - j
-                    elif tx+tw <= j:
-                        if j - (tx+tw) + 1 > d:
-                            l = x+w+int(padding/2) - (tx+tw)
-                            d = j - (tx+tw) + 1
-                    ca = d/l
-                    ta = (l-d)/l
-                    copy[i,j] = copy[i, j]*ca
-                    span_target[i,j] = span_target[i,j]*ta
-                    # copy[i,j] += span_target[i, j]
-                elif ty+th <= i:
-                    l = y+h+int(padding/2) - (ty+th)
-                    d = i - (ty+th) + 1
-                    if j < tx:
-                        if tx - j > d:
-                            l = tx - (x-int(padding/2))
-                            d = tx - j
-                    elif tx+tw <= j:
-                        if j - (tx+tw) + 1 > d:
-                            l = x+w+int(padding/2) - (tx+tw)
-                            d = j - (tx+tw) + 1
-                    ca = d/l
-                    ta = (l-d)/l
-                    copy[i,j] = copy[i, j]*ca
-                    span_target[i,j] = span_target[i,j]*ta
-                    # copy[i,j] += span_target[i, j]
-                elif j < tx:
-                    l = tx - (x-int(padding/2))
-                    d = tx - j
-                    ca = d/l
-                    ta = (l-d)/l
-                    copy[i,j] = copy[i, j]*ca
-                    span_target[i,j] = span_target[i,j]*ta
-                    # copy[i,j] += span_target[i, j]
-                elif tx+tw <= j:
-                    l = x+w+int(padding/2) - (tx+tw)
-                    d = j - (tx+tw) + 1
-                    ca = d/l
-                    ta = (l-d)/l
-                    copy[i,j] = copy[i, j]*ca
-                    span_target[i,j] = span_target[i,j]*ta
-                    # copy[i,j] += span_target[i, j]
-                else :
-                    copy[i,j] = 0
-    copy = cv2.add(span_target, copy)
-    return copy
+    copy[:,:,0] = copy[:,:,0]*mask
+    copy[:,:,1] = copy[:,:,1]*mask
+    copy[:,:,2] = copy[:,:,2]*mask
 
-fourcc = cv2.VideoWriter_fourcc(*'XVID')
-out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 10.0, (1280, 360))
+    # mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    # mm = cv2.fillPoly(mm, [shape[2:15]], 255)
+    # span_target = cv2.bitwise_and(span_target, span_target, mask=mm)
+
+    copy = cv2.add(copy, span_target)
+
+    # under_shape = np.concatenate((shape[2:15], np.flip(target_shape[4:13], axis=0)), axis=0)
+    # copy = cv2.fillPoly(copy, [under_shape], (255, 255, 255))
+
+    return copy
 
 source_list = glob.glob(source_folder+'/**/*.*', recursive=True)
 source_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
 target_list = glob.glob(target_folder+'/**/*.*', recursive=True)
 target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
 
+fourcc = cv2.VideoWriter_fourcc(*'XVID')
+tmp = cv2.imread(source_list[0])
+out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 24.0, (tmp.shape[1]*2, tmp.shape[0]))
+
 shapes = []
-for i, file in enumerate(source_list):
-    print("reading file: %s" % file)
-    source = cv2.imread(file)
+for i in range(len(target_list)):
+    print("reading file: %s" % source_list[i])
+    source = cv2.imread(source_list[i])
     shapes.append(get_face(source))
 
-shape2 = []
-shape2.append(shapes[0])
-for i in range(1, len(shapes)-1):
-    # shapes[i] = (shapes[i-1]+shapes[i+1])/2
-    w = (shapes[i-1]+shapes[i+1])/2
-    shape2.append(shapes[i]*0.5 + w*0.5)
-shape2.append(shapes[len(shapes)-1])
+# shape2 = []
+# shape2.append(shapes[0])
+# for i in range(1, len(shapes)-1):
+#     w = (shapes[i-1]+shapes[i+1])/2
+#     shape2.append(shapes[i]*0.8 + w*0.2)
+# shape2.append(shapes[len(shapes)-1])
+
+# for i in range(0, 68):
+#     print(shapes[:, :, 0])
+#     shapes[:, i][0] = curve_fitting(len(shapes), shapes[:, i][0], 15)
+#     shapes[:, i][1] = curve_fitting(len(shapes), shapes[:, i][1], 15)
 
 print("start making video")    
-for i, file in enumerate(source_list):
-    print("{} / {}".format(i+1, len(source_list)))
-    source = cv2.imread(file)
-    # target = cv2.imread(target_list[i])
-    target = cv2.imread('../data/ann2land/img/424.jpg')
+for i, file in enumerate(target_list):
+    print("{} / {}".format(i+1, len(target_list)))
+    source = cv2.imread(source_list[i])
+    target = cv2.imread(file)
+    # target = cv2.imread('../data/taylor/land/img/127.jpg')
     target_shape = np.zeros((69, 2), dtype='int')
     
-    f = open('../data/ann2land/txt/424.txt')
-    # f = open(os.path.dirname(target_list[i])+'/../txt/'+os.path.basename(target_list[i])[:len(os.path.basename(target_list[i]))-4]+'.txt')
+    # f = open('../data/taylor/land/txt/127.txt')
+    f = open(os.path.dirname(file)+'/../txt/'+os.path.basename(file)[:len(os.path.basename(file))-4]+'.txt')
     line = f.readline()
     p = line.split(' ')
     w = int(p[0])
@@ -269,19 +383,16 @@ for i, file in enumerate(source_list):
     target_shape[:,0] = np.dot(target_shape[:,0], w/256)
     target_shape[:,1] = np.dot(target_shape[:,1], h/256)
 
-    dst = patch_lip(source, shape2[i], target, target_shape)
-    # dst = patch_lip(source, shapes[i], target, target_shape)
+    # dst = patch_lip(source, shape2[i], target, target_shape)
+    dst = patch_lip(source, shapes[i], target, target_shape)
 
     dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
     dst = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)
 
-    source = cv2.resize(source, None, fx=0.5, fy=0.5)
-    dst = cv2.resize(dst, None, fx=0.5, fy=0.5)
-
     ret = np.concatenate((source, dst), axis=1)
 
     out.write(ret)
-    cv2.imwrite(output_folder+'/img/{}'.format(os.path.basename(file)) , dst)
+    cv2.imwrite(output_folder+'/img/{}.png'.format(os.path.basename(file)[:len(os.path.basename(file))-4]) , ret)
     # cv2.imshow('source', ret)
     # cv2.imshow('target', target)
     # cv2.imshow('copy', dst)
