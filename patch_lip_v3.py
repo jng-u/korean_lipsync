@@ -1,15 +1,22 @@
 import os
 import sys
-import math
-import dlib
-import cv2
-import numpy as np
 import glob
 import argparse
+import math
+
+import cv2
+import dlib
+from imutils import face_utils
+
+import numpy as np
 import matplotlib.pyplot as plt
 
+# cascPath = "/home/jngu/anaconda3/envs/py3/lib/python3.8/site-packages/cv2/data/haarcascade_frontalface_default.xml"
+# faceCascade = cv2.CascadeClassifier(cascPath)
+
 detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
+# predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
+predictor = dlib.shape_predictor("./shape_predictor_5_face_landmarks.dat")
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--source', dest='source_folder', type=str)
@@ -51,17 +58,22 @@ def get_face(img):
     # 얼굴 인식 향상을 위해 Contrast Limited Adaptive Histogram Equalization
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     adaptive = clahe.apply(gray)
+    ratio = 1/6
+    adaptive_resize = cv2.resize(adaptive, None, fx=ratio, fy=ratio)
 
-    ##### detect face and shape
+    #### detect face and shape
     # detects whole face
-    rects = detector(adaptive, 1)
+    rects = detector(adaptive_resize, 1)
     if len(rects) == 0:
-        print("error finding face at file: %s" % file)
+        print('error finding face')
         return None
+
+    rects[0] = dlib.scale_rect(rects[0], 1/ratio)
+    (x, y, w, h) = face_utils.rect_to_bb(rects[0])
+    rect = dlib.rectangle(x-10, y-10, x+w+10, y+h+10)   
     
     # 얼굴이 하나임을 가정
-    # rects[0] = dlib.scale_rect(rects[0], 1/ratio)
-    shape = predictor(image=adaptive,box=rects[0])
+    shape = predictor(image=adaptive, box=rect)
     shape = shape_to_np(shape)
     return shape
 
@@ -124,50 +136,56 @@ def curve_fitting(n, data, max_i):
         ret = [r + A[i]*math.cos((i+1)*w0*t) + B[i]*math.sin((i+1)*w0*t) for r, t in zip(ret, x)]
     return ret
 
-def patch_lip(source, shape, target, target_shape):    
+def patch_lip(source, shape, target, target_shape, width_fitting):    
     shape = np.array(shape, dtype='int')
     # print(shape)
 
     # rescale 타겟이미지의 크기를 소스의 얼굴 하관부분에 맞춘다.
-    p1 = shape[2]
-    p2 = shape[14]
-    # p1 = shape[48]
-    # p2 = shape[54]
-    vw = [a-b for a,b in zip(p2, p1)]
-    w = math.sqrt(vw[0]**2+vw[1]**2)
-    # tp1 = target_shape[48]
-    # tp2 = target_shape[54]
-    # tvw = [a-b for a,b in zip(tp2, tp1)]
-    # tw = math.sqrt(tvw[0]**2+tvw[1]**2)
-    # scale = w/tw
-    scale = w/target.shape[1]
+    # p1 = shape[2]
+    # p2 = shape[14]
+    # p1 = shape[0]
+    # p2 = shape[2]
+    # p1 = middle_point(shape[0], shape[1])
+    # p2 = middle_point(shape[2], shape[3])
+    # vw = [a-b for a,b in zip(p2, p1)]
+    # w = math.sqrt(vw[0]**2+vw[1]**2)
+    # scale = w/target.shape[1]
+    # tp1 = target_shape[36]
+    # tp2 = target_shape[45]
+    tp1 = middle_point(target_shape[36], target_shape[39])
+    tp2 = middle_point(target_shape[42], target_shape[45])
+    # tp1 = target_shape[36:42].mean(axis=0).astype('int')
+    # tp2 = target_shape[42:48].mean(axis=0).astype('int')
+    tvw = [a-b for a,b in zip(tp2, tp1)]
+    tw = math.sqrt(tvw[0]**2+tvw[1]**2)
+    scale = (width_fitting/tw)
     target = cv2.resize(target, None, fx=scale, fy=scale)
     target_shape[:,:] = target_shape[:,:]*scale
     # background = np.copy(target)
     # bg_shape = np.copy(target_shape)
 
     # 타겟이미지를 source이미지의 크기만큼 span한다
-    under_shape = shape[2:15]
+    # under_shape = shape[2:15]
 
     span_target = np.zeros(shape=source.shape, dtype='uint8')
-    (x, y, w, h) = get_rect(shape[48:60])
-    (tx, ty, tw, th) = get_rect(target_shape[48:60])
     ctp = middle_point(target_shape[51], target_shape[57])
-    # ctp2 = middle_point(target_shape[48], target_shape[54])
-    # ctp = middle_point(ctp, ctp2)
-    # ctp = np.copy(target_shape[51])
-    ctp = (tx+int(tw/2), ty)
+    l = math.sqrt(sum([x**2 for x in ctp-target_shape[33]]))
+    v = shape[4] - middle_point(middle_point(shape[0], shape[1]), middle_point(shape[2], shape[3]))
+    th = math.atan(v[1]/v[0])
+    v = v / math.sqrt(sum([x**2 for x in v]))
+    v = (int(round(l*math.cos(th)*v[0])), abs(int(round(l*math.sin(th)*v[1]))))
+    cp = shape[4] + v
+    # ctp = middle_point(target_shape[51], target_shape[57])
+    # cp = shape[4] + ctp - target_shape[33]
     # cp = shape[33] + ctp - target_shape[33]
-    cp = (x + int(w/2), y)
     span_target[cp[1]-ctp[1]:cp[1]-ctp[1]+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
-    # span_target[y:y+target.shape[0], cp[0]-ctp[0]:cp[0]-ctp[0]+target.shape[1]] = target
     for s in target_shape:
         s += [cp[0]-ctp[0], cp[1]-ctp[1]]
-
+    
     mask = np.zeros(shape=span_target.shape[:2], dtype='float')
     (tx, ty, tw, th) = get_rect(target_shape[2:15])
     (mx, my, mw, mh) = get_rect(target_shape[48:60])
-    padding = 10
+    padding = 40
     (x, y, w, h) = (mx-padding, my-padding, mw+2*padding, mh+2*padding)
     if tx>x: x=tx
     if ty>y: y=ty
@@ -195,19 +213,21 @@ def patch_lip(source, shape, target, target_shape):
                 l = math.sqrt((j-mx-mw)**2 + (i-my)**2)
             elif i>=my+mh and j<=mx:
                 # d=1
-                if mx-j < i-(my+mh):
-                    d = math.sqrt((j-mx)**2 + (y+h-my-mh)**2)
-                else:
-                    d = math.sqrt((x-mx)**2 + (i-my-mh)**2)
+                # if mx-j < i-(my+mh):
+                #     d = math.sqrt((j-mx)**2 + (y+h-my-mh)**2)
+                # else:
+                #     d = math.sqrt((x-mx)**2 + (i-my-mh)**2)
                 # d = math.sqrt((x-mx)**2 + (y+h-my-mh)**2)
+                d = math.sqrt(((x-mx)/2)**2 + ((y+h-my-mh)/2)**2)
                 l = math.sqrt((j-mx)**2 + (i-my-mh)**2)
             elif i>=my+mh and j>=mx+mw:
                 # d=1
-                if j-(mx+mw) < i-(my+mh):
-                    d = math.sqrt((j-mx-mw)**2 + (y+h-my-mh)**2)
-                else:
-                    d = math.sqrt((x+w-mx-mw)**2 + (i-my-mh)**2)
+                # if j-(mx+mw) < i-(my+mh):
+                #     d = math.sqrt((j-mx-mw)**2 + (y+h-my-mh)**2)
+                # else:
+                #     d = math.sqrt((x+w-mx-mw)**2 + (i-my-mh)**2)
                 # d = math.sqrt((x+w-mx-mw)**2 + (y+h-my-mh)**2)
+                d = math.sqrt(((x+w-mx-mw)/2)**2 + ((y+h-my-mh)/2)**2)
                 l = math.sqrt((j-mx-mw)**2 + (i-my-mh)**2)
             elif i < my:
                 d = my - y
@@ -224,8 +244,14 @@ def patch_lip(source, shape, target, target_shape):
                 l = j-mx-mw
             ca = l/d
             ta = (d-l)/d
+            if ta<0: ta=0
             mask[i, j] = ta
+            
 
+    # cv2.imshow('asad', mask)
+    # while(True):
+    #     if(cv2.waitKey(10) != -1):
+    #         break
 
     # p1 = shape[2]
     # p2 = shape[14]
@@ -260,15 +286,17 @@ def patch_lip(source, shape, target, target_shape):
 
 
     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
-    # rp1 = middle_point(shape[49], shape[59])
-    # rp2 = middle_point(shape[53], shape[55])
-    # rp1 = middle_point(rp1, shape[48])
-    # rp2 = middle_point(rp2, shape[54])
-    ta1, ta0 = linear_reg(target_shape[48:68][:, 0], target_shape[48:68][:, 1])
+    # ta1, ta0 = linear_reg(target_shape[48:68][:, 0], target_shape[48:68][:, 1])
+    ta1, ta0 = linear_reg(target_shape[36:48][:, 0], target_shape[36:48][:, 1])
     trp1 = (0, ta0)
     trp2 = (1, ta1+ta0)
-    # angle = get_rotate_angle(target_shape[48], target_shape[54]) - get_rotate_angle(rp1, rp2)
-    angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(shape[48], shape[54])
+    # trp1 = target_shape[36:42].mean(axis=0).astype('int')
+    # trp2 = target_shape[42:48].mean(axis=0).astype('int')
+    # angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(shape[48], shape[54])
+    a1, a0 = linear_reg(shape[0:4][:, 0], shape[0:4][:, 1])
+    rp1 = (0, a0)
+    rp2 = (1, a1+a0)
+    angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(rp1, rp2)
 
     # background_rotate_mat = cv2.getRotationMatrix2D(tuple(shape[2]), -get_rotate_angle(shape[2], shape[14]), 1)
     # span_background = cv2.warpAffine(span_background, background_rotate_mat, tuple(np.flip(span_background.shape[:2])))
@@ -296,22 +324,29 @@ def patch_lip(source, shape, target, target_shape):
     # copy = cv2.add(copy, span_background)
 
 
-    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[51]), angle, 1)
+    # rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[51]), angle, 1)
+    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[4]), angle, 1)
     span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
     mask = cv2.warpAffine(mask, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
-    target_shape = get_rotate_point(tuple(shape[51]), rotate_matrix[:, :2], target_shape)
+    # target_shape = get_rotate_point(tuple(shape[51]), rotate_matrix[:, :2], target_shape)
+    target_shape = get_rotate_point(tuple(shape[4]), rotate_matrix[:, :2], target_shape)
     
     mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
     mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
     mask = cv2.bitwise_and(mask, mask, mask=mm)
 
-    mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
-    mm = cv2.fillPoly(mm, [shape[2:15]], 255)
-    mask = cv2.bitwise_and(mask, mask, mask=mm)
+    # mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    # mm = cv2.fillPoly(mm, [shape[2:15]], 255)
+    # mask = cv2.bitwise_and(mask, mask, mask=mm)
 
     span_target[:,:,0] = span_target[:,:,0]*mask
     span_target[:,:,1] = span_target[:,:,1]*mask
     span_target[:,:,2] = span_target[:,:,2]*mask
+
+    # cv2.imshow('asd', span_target)
+    # while(True):
+    #     if(cv2.waitKey(10) != -1):
+    #         break
 
     mask = 1-mask
     copy[:,:,0] = copy[:,:,0]*mask
@@ -336,13 +371,20 @@ target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basen
 
 fourcc = cv2.VideoWriter_fourcc(*'XVID')
 tmp = cv2.imread(source_list[0])
-out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 24.0, (tmp.shape[1]*2, tmp.shape[0]))
+out = cv2.VideoWriter(output_folder+'/output.avi', fourcc, 15.0, (tmp.shape[1]*2, tmp.shape[0]))
 
 shapes = []
+ws = []
 for i in range(len(target_list)):
     print("reading file: %s" % source_list[i])
     source = cv2.imread(source_list[i])
-    shapes.append(get_face(source))
+    shape = get_face(source)
+    shapes.append(shape)
+    p1 = middle_point(shape[0], shape[1])
+    p2 = middle_point(shape[2], shape[3])
+    vw = [a-b for a,b in zip(p2, p1)]
+    w = math.sqrt(vw[0]**2+vw[1]**2)
+    ws.append(w)
 
 # shape2 = []
 # shape2.append(shapes[0])
@@ -351,11 +393,14 @@ for i in range(len(target_list)):
 #     shape2.append(shapes[i]*0.8 + w*0.2)
 # shape2.append(shapes[len(shapes)-1])
 
-# for i in range(0, 68):
-#     print(shapes[:, :, 0])
-#     shapes[:, i][0] = curve_fitting(len(shapes), shapes[:, i][0], 15)
-#     shapes[:, i][1] = curve_fitting(len(shapes), shapes[:, i][1], 15)
+# shapes = np.array(shapes)
+# iter = int(round(len(target_list))/2)
+# for i in range(0, len(shapes[0])):
+#     shapes[:, i, 0] = curve_fitting(len(shapes), shapes[:, i, 0], iter)
+#     shapes[:, i, 1] = curve_fitting(len(shapes), shapes[:, i, 1], iter)
 
+# ws = curve_fitting(len(ws), ws, iter)
+    
 print("start making video")    
 for i, file in enumerate(target_list):
     print("{} / {}".format(i+1, len(target_list)))
@@ -384,7 +429,7 @@ for i, file in enumerate(target_list):
     target_shape[:,1] = np.dot(target_shape[:,1], h/256)
 
     # dst = patch_lip(source, shape2[i], target, target_shape)
-    dst = patch_lip(source, shapes[i], target, target_shape)
+    dst = patch_lip(source, shapes[i], target, target_shape, ws[i])
 
     dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
     dst = cv2.cvtColor(dst, cv2.COLOR_RGB2BGR)

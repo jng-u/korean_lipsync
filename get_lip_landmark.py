@@ -1,11 +1,15 @@
 import os
 import sys
-import math
-import dlib
-import cv2
-import numpy as np
 import glob
 import argparse
+import math
+
+import cv2
+import dlib
+from imutils import face_utils
+
+import numpy as np
+import matplotlib.pyplot as plt
 
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
@@ -59,29 +63,41 @@ def get_rotate_point(pivot, rotate_matrix, point_list):
 def middle_point(s, e):
     return (int(round((s[0]+e[0])/2)), int(round((s[1]+e[1])/2)))
 
+def get_face(img):
+    ##### 전처리
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    # 얼굴 인식 향상을 위해 Contrast Limited Adaptive Histogram Equalization
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    adaptive = clahe.apply(gray)
+    ratio = 1/2
+    adaptive_resize = cv2.resize(adaptive, None, fx=ratio, fy=ratio)
+
+    #### detect face and shape
+    # detects whole face
+    rects = detector(adaptive_resize, 1)
+    if len(rects) == 0:
+        print("error finding face at file: %s" % file)
+        return []
+
+    rects[0] = dlib.scale_rect(rects[0], 1/ratio)
+    (x, y, w, h) = face_utils.rect_to_bb(rects[0])
+    rect = dlib.rectangle(x-10, y-10, x+w+10, y+h+10)   
+    
+    # 얼굴이 하나임을 가정
+    shape = predictor(image=adaptive, box=rect)
+    shape = shape_to_np(shape)
+    return shape
+
 file_list = glob.glob(input_folder+'/**/*.*', recursive=True)
+file_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
 for i, file in enumerate(file_list):
     print("{} / {}".format(i+1, len(file_list)))
     img = cv2.imread(file)
 
-    ##### 전처리
-    gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    # 얼굴 인식 향상을 위해 Contrast Limited Adaptive Histogram Equalization
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    adaptive_img = clahe.apply(gray_img)
-
-    ##### detect face and shape
-    # detects whole face
-    rects = detector(adaptive_img, 1)
-    if len(rects) == 0:
-        print("error finding face at file: %s" % file)
+    shape = get_face(img)
+    if len(shape)==0:
         continue
-    
-    # 얼굴이 하나임을 가정
-    # rects[0] = dlib.scale_rect(rects[0], 1/ratio)
-    shape = predictor(image=adaptive_img,box=rects[0])
-    shape = shape_to_np(shape)
 
     ##### rotation 처리 
     # 광대를 수평에 맞추도록 이미지를 rotation

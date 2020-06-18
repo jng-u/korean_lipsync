@@ -2,7 +2,7 @@ import os
 import sys
 import math
 import cv2
-import numpy as np
+import numpy as np  
 import glob
 import argparse
 import matplotlib.pyplot as plt
@@ -103,7 +103,7 @@ for i in range(len(nums)-1):
                     f.write(data)
                 f.close()
                 cnt+=1
-
+            
         # axs[i].imshow(land)
         # axs[i].set_title(i)
         # axs[i].axis('off')

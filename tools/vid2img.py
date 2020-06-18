@@ -19,7 +19,7 @@ vidlist = glob.glob('{}/**/*.*'.format(input_folder), recursive=True)
 for vid in vidlist:
     cap = cv2.VideoCapture(vid)
     fps = cap.get(cv2.CAP_PROP_FPS)
-    f = int(fps/WANTED_FPS)
+    f = int(round(fps/WANTED_FPS))
     print(fps)
     print(f)
     print('start %s' %vid)
