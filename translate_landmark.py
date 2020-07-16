@@ -7,18 +7,26 @@ import glob
 import argparse
 import matplotlib.pyplot as plt
 
-landmark_path = ['../data/taylor/land/txt/0.txt', \
-            '../data/taylor/land/txt/0.txt', \
-            # '../data/taylor/land/txt/1292.txt', \
-            '../data/taylor/land/txt/1425.txt', \
-            '../data/taylor/land/txt/94.txt', \
-            # '../data/taylor/land/txt/196.txt', \
-            '../data/taylor/land/5.txt', \
-            # '../data/taylor/land/txt/1541.txt', \
-            '../data/taylor/land/txt/933.txt', \
-            '../data/taylor/land/txt/0.txt', \
-            # '../data/taylor/land/txt/924.txt']
-            '../data/taylor/land/8.txt']
+# landmark_path = ['../data/taylor/land/txt/0.txt', \
+#             '../data/taylor/land/txt/0.txt', \
+#             # '../data/taylor/land/txt/1292.txt', \
+#             '../data/taylor/land/txt/1425.txt', \
+#             '../data/taylor/land/txt/94.txt', \
+#             # '../data/taylor/land/txt/196.txt', \
+#             '../data/taylor/land/5.txt', \
+#             # '../data/taylor/land/txt/1541.txt', \
+#             '../data/taylor/land/txt/933.txt', \
+#             '../data/taylor/land/txt/0.txt', \
+#             # '../data/taylor/land/txt/924.txt']
+#             '../data/taylor/land/8.txt']
+landmark_path = ['../data/ljw/stdland/txt/1.txt', \
+                '../data/ljw/stdland/txt/89.txt', \
+                '../data/ljw/stdland/txt/3.txt', \
+                '../data/ljw/stdland/txt/346.txt', \
+                '../data/ljw/stdland/txt/929.txt', \
+                '../data/ljw/stdland/txt/6.txt', \
+                '../data/ljw/stdland/txt/1191.txt', \
+                '../data/ljw/stdland/txt/8.txt']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--number', dest='num', type=str)
@@ -71,38 +79,39 @@ for i in range(len(nums)-1):
     end = to_shape(end)
 
     lands, shapes = translate(start, end, iteration)
+    
+    os.makedirs(output_folder+'/land/{}_{}'.format(s, e), exist_ok = True)
+    os.makedirs(output_folder+'/txt/{}_{}'.format(s, e), exist_ok = True)
 
     # fig = plt.figure(figsize=(13, 2))
     # axs = fig.subplots(ncols=13)
-    if i==0:
-        land = cv2.cvtColor(lands[0], cv2.COLOR_GRAY2RGB)
-        for k in range(5):
-            cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
-            f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
-            for s in shapes[0]:
-                data = '{} {}\n'.format(s[0], s[1])
-                f.write(data)
-            f.close()
-            cnt+=1
+    # if i==0:
+    #     land = cv2.cvtColor(lands[0], cv2.COLOR_GRAY2RGB)
+    #     cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
+    #     f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
+    #     for shape in shapes[0]:
+    #         data = '{} {}\n'.format(shape[0], shape[1])
+    #         f.write(data)
+    #     f.close()
+    #     cnt+=1
     for j, land in enumerate(lands):
-        if j==0: continue
+        # if j==0: continue
         land = cv2.cvtColor(land, cv2.COLOR_GRAY2RGB)
-        cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
-        f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
-        for s in shapes[j]:
-            data = '{} {}\n'.format(s[0], s[1])
+        cv2.imwrite(output_folder+'/land/{}_{}/{}.jpg'.format(s, e, cnt), land)
+        f = open(output_folder+'/txt/{}_{}/{}.txt'.format(s, e, cnt), 'w')
+        for shape in shapes[j]:
+            data = '{} {}\n'.format(shape[0], shape[1])
             f.write(data)
         f.close()
         cnt+=1
-        if j==len(lands)-1:
-            for k in range(4):
-                cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
-                f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
-                for s in shapes[j]:
-                    data = '{} {}\n'.format(s[0], s[1])
-                    f.write(data)
-                f.close()
-                cnt+=1
+        # if j==len(lands)-1:
+        #     cv2.imwrite(output_folder+'/land/{}.jpg'.format(cnt), land)
+        #     f = open(output_folder+'/txt/{}.txt'.format(cnt), 'w')
+        #     for shape in shapes[j]:
+        #         data = '{} {}\n'.format(shape[0], shape[1])
+        #         f.write(data)
+        #     f.close()
+        #     cnt+=1
             
         # axs[i].imshow(land)
         # axs[i].set_title(i)

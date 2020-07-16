@@ -18,13 +18,13 @@ from PIL import ImageTk
 import numpy as np
 import matplotlib.pyplot as plt
 
-import hangul
+import tools.hangul
 
 FPS = 15
 
 detector = dlib.get_frontal_face_detector()
-# predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
-predictor = dlib.shape_predictor("./shape_predictor_5_face_landmarks.dat")
+predictor = dlib.shape_predictor("./shape_predictor_68_face_landmarks.dat")
+# predictor = dlib.shape_predictor("./shape_predictor_5_face_landmarks.dat")
 
 def get_rect(shape):
     xs = shape[:, 0]
@@ -127,41 +127,77 @@ def curve_fitting(n, data, max_i):
 def patch_lip(source, shape, target, target_shape):    
     shape = np.array(shape, dtype='int')
 
-    p1 = middle_point(shape[0], shape[1])
-    p2 = middle_point(shape[2], shape[3])
+    p1 = shape[2]
+    p2 = shape[14]
     vw = [a-b for a,b in zip(p2, p1)]
     w = math.sqrt(vw[0]**2+vw[1]**2)
-    tp1 = middle_point(target_shape[36], target_shape[39])
-    tp2 = middle_point(target_shape[42], target_shape[45])
-    # tp1 = target_shape[36:42].mean(axis=0).astype('int')
-    # tp2 = target_shape[42:48].mean(axis=0).astype('int')
-    tvw = [a-b for a,b in zip(tp2, tp1)]
-    tw = math.sqrt(tvw[0]**2+tvw[1]**2)
-    scale = w/tw
+    # tp1 = target_shape[48]
+    # tp2 = target_shape[54]
+    # tvw = [a-b for a,b in zip(tp2, tp1)]
+    # tw = math.sqrt(tvw[0]**2+tvw[1]**2)
+    # scale = w/tw
+    p3 = shape[8]
+    vh = [a-b for a,b in zip(p3, p1)]
+    vwp = [vw[1], -vw[0]]
+    scale = w/target.shape[1]
     target = cv2.resize(target, None, fx=scale, fy=scale)
     target_shape[:,:] = target_shape[:,:]*scale
+    source_height = abs(np.dot(vh, vwp)/math.sqrt(vwp[0]**2+vwp[1]**2))
+    target_height = target.shape[0]
+
+    # mm = np.zeros(shape=target.shape[:2], dtype='uint8')
+    # mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
+    # mm = cv2.erode(mm, np.ones((5, 1)), iterations=5)
+
+    bg_shape = np.copy(shape)
+    background = np.copy(source)
+        
+    angle = get_rotate_angle(shape[2], shape[14])
+    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[2]), angle, 1)
+    background = cv2.warpAffine(background, rotate_matrix, tuple(np.flip(background.shape[:2])))
+    bg_shape = get_rotate_point(tuple(shape[2]), rotate_matrix[:, :2], bg_shape)
+
+    (x, y, w, h) = get_rect(bg_shape[2:15])
+    background_crop = np.zeros((w, h))
+    background_crop = background[y:y+h, x:x+w]
+    for s in bg_shape:
+        s -= [x, y]
+    scale = target_height/h
+    background_crop = cv2.resize(background_crop, None, fx=1, fy=scale)
+    bg_shape[:,1] = bg_shape[:,1]*scale
+
+    span_background = np.zeros(shape=source.shape, dtype='uint8')
+    span_background[y:y+background_crop.shape[0], x:x+background_crop.shape[1]] = background_crop
+    for s in bg_shape:
+        s += [x, y]
+        
+    angle = - get_rotate_angle(shape[2], shape[14])
+    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[2]), angle, 1)
+    span_background = cv2.warpAffine(span_background, rotate_matrix, tuple(np.flip(background.shape[:2])))
+    bg_shape = get_rotate_point(tuple(shape[2]), rotate_matrix[:, :2], bg_shape)
+
+
 
     span_target = np.zeros(shape=source.shape, dtype='uint8')
-    ctp = middle_point(target_shape[51], target_shape[57])
-    l = math.sqrt(sum([x**2 for x in ctp-target_shape[33]]))
-    v = shape[4] - middle_point(middle_point(shape[0], shape[1]), middle_point(shape[2], shape[3]))
-    th = math.atan(v[1]/v[0])
-    v = v / math.sqrt(sum([x**2 for x in v]))
-    v = (int(round(l*math.cos(th)*v[0])), abs(int(round(l*math.sin(th)*v[1]))))
-    cp = shape[4] + v
-    hs=cp[1]-ctp[1] if cp[1]-ctp[1]>=0 else 0
-    he=cp[1]-ctp[1]+target.shape[0] if cp[1]-ctp[1]+target.shape[0]<=span_target.shape[0] else span_target.shape[0]
-    ws=cp[0]-ctp[0] if cp[0]-ctp[0]>=0 else 0
-    we=cp[0]-ctp[0]+target.shape[1] if cp[0]-ctp[0]+target.shape[1]<=span_target.shape[1] else span_target.shape[1]
-    span_target[hs:he, ws:we] = target[0:he-hs,0:we-ws]
-    for s in target_shape:
-        s += [cp[0]-ctp[0], cp[1]-ctp[1]]
+    v = target_shape[51] - target_shape[33]
+    # v = [middle_point(target_shape[48], target_shape[54])[0], target_shape[51][1] - target_shape[33][1]]
+    # v = middle_point(target_shape[48], target_shape[54]) - target_shape[33]
     
+    ctp = target_shape[51]
+    # ctp = [middle_point(target_shape[48], target_shape[54])[0], target_shape[51][1]]
+    # ctp = middle_point(target_shape[48], target_shape[54])
+    cp = shape[33] + v 
+    wd = cp[0]-ctp[0]
+    hd = cp[1]-ctp[1]
+    span_target[hd:hd+target.shape[0], wd:wd+target.shape[1]] = target
+    for s in target_shape:
+        s += [wd, hd]
+
     mask = np.zeros(shape=span_target.shape[:2], dtype='float')
     (tx, ty, tw, th) = get_rect(target_shape[2:15])
     (mx, my, mw, mh) = get_rect(target_shape[48:60])
-    padding = 15
-    (x, y, w, h) = (mx-padding, my-padding, mw+2*padding, mh+2*padding)
+    padding = int(mh/2)
+    (x, y, w, h) = get_rect(target_shape[2:15])
     if tx>x: x=tx
     if ty>y: y=ty
     if x+w>x+tw: w=tw
@@ -221,27 +257,97 @@ def patch_lip(source, shape, target, target_shape):
             ta = (d-l)/d
             if ta<0: ta=0
             mask[i, j] = ta
-            
-
-    copy = np.copy(source)    
-
 
     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
-    ta1, ta0 = linear_reg(target_shape[36:48][:, 0], target_shape[36:48][:, 1])
+    ta1, ta0 = linear_reg(target_shape[48:55][:, 0], target_shape[48:55][:, 1])
     trp1 = (0, ta0)
     trp2 = (1, ta1+ta0)
-    a1, a0 = linear_reg(shape[0:4][:, 0], shape[0:4][:, 1])
+    a1, a0 = linear_reg(shape[48:55][:, 0], shape[48:55][:, 1])
     rp1 = (0, a0)
     rp2 = (1, a1+a0)
     angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(rp1, rp2)
-
-    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[4]), angle, 1)
-    span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
-    mask = cv2.warpAffine(mask, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
-    target_shape = get_rotate_point(tuple(shape[4]), rotate_matrix[:, :2], target_shape)
+    # angle = get_rotate_angle(target_shape[48], target_shape[54]) - get_rotate_angle(shape[48], shape[54])
+    # angle = - get_rotate_angle(shape[2], shape[14])
     
+    rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[33]), angle, 1)
+    # rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[2]), angle, 1)
+    span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
+    target_shape = get_rotate_point(tuple(shape[33]), rotate_matrix[:, :2], target_shape)
+    # target_shape = get_rotate_point(tuple(shape[2]), rotate_matrix[:, :2], target_shape)
+
+    copy = np.copy(source)   
+
+    # removed_undershape = np.concatenate((shape[2:15], np.flip(bg_shape[2:15], axis=0)), axis=0)     
+    # copy = cv2.fillPoly(copy, [removed_undershape], (0, 0, 0))
+
+    if target_height > source_height:        
+    # if False:        
+        bg_mask = np.zeros(shape=span_background.shape[:2], dtype='float')
+        (x, y, w, h) = get_rect(bg_shape[2:15])
+        m = int(w/3)
+        for i in range(y, y+h):
+            if i>y+m:
+                bg_mask[i, :] = 1-(i-(y+m))/m
+            else:    
+                # bg_mask[i, :] = 1-(y+m-i)/m
+                bg_mask[i, :] = 0
+
+        # copycopy = np.copy(copy)
+        # copycopy = cv2.fillPoly(copycopy, [shape[2:15]], (0, 0, 0))
+        
+        # bg_copy = np.copy(span_background)
+        # mm = np.zeros(shape=span_background.shape[:2], dtype='uint8')
+        # mm = cv2.fillPoly(mm, [bg_shape[2:15]], 255)
+        # bg_copy = cv2.bitwise_and(bg_copy, bg_copy, mask=mm)
+
+        # copycopy = cv2.add(copycopy, bg_copy)
+        # sh = get_face(copycopy)
+        
+        # jaw = sh[0:17]
+        # cv2.polylines(copy, [jaw], False, (0, 0, 0), 2)
+        # cv2.imshow('sasas', copycopy)
+        # while True:
+        #     if cv2.waitKey(1) != -1:
+        #         break
+
+        mm = np.zeros(shape=span_background.shape[:2], dtype='uint8')
+        # mm = cv2.fillPoly(mm, [sh[2:15]], 255)
+        mm = cv2.fillPoly(mm, [bg_shape[2:15]], 255)
+        # mm = cv2.erode(mm, np.ones((5, 1)), iterations=5)
+        bg_mask = cv2.bitwise_and(bg_mask, bg_mask, mask=mm)
+
+        # bg_mask = np.zeros(shape=span_background.shape[:2], dtype='uint8')
+        # bg_mask = cv2.fillPoly(bg_mask, [bg_shape[2:15]], 255)
+        # # (x, y, w, h) = get_rect(bg_shape[48:60])
+        # # x-=10
+        # # y-=10
+        # # w+=10
+        # # h+=10
+        # # mouth = np.array(([x, y], [x+w, y], [x+w, y+h], [x, y+h]))
+        # bg_mask = cv2.fillPoly(bg_mask, [bg_shape[48:60]], 0)
+        # # bg_mask = cv2.erode(bg_mask, np.ones((5, 5)), iterations=5)
+        # span_background = cv2.bitwise_and(span_background, span_background, mask=bg_mask)
+        # bg_mask = 255-bg_mask
+        # copy = cv2.bitwise_and(copy, copy, mask=bg_mask)
+        
+        span_background[:,:,0] = span_background[:,:,0]*bg_mask
+        span_background[:,:,1] = span_background[:,:,1]*bg_mask
+        span_background[:,:,2] = span_background[:,:,2]*bg_mask
+
+        bg_mask = 1-bg_mask
+        copy[:,:,0] = copy[:,:,0]*bg_mask
+        copy[:,:,1] = copy[:,:,1]*bg_mask
+        copy[:,:,2] = copy[:,:,2]*bg_mask
+
+        copy = cv2.add(copy, span_background)
+
+    mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    mm = cv2.fillPoly(mm, [shape[2:15]], 255)
+    mask = cv2.bitwise_and(mask, mask, mask=mm)
+
     mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
     mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
+    mm = cv2.erode(mm, np.ones((3, 3)), iterations=2)
     mask = cv2.bitwise_and(mask, mask, mask=mm)
 
     span_target[:,:,0] = span_target[:,:,0]*mask
@@ -255,8 +361,141 @@ def patch_lip(source, shape, target, target_shape):
 
     copy = cv2.add(copy, span_target)
 
-
     return copy
+
+# def patch_lip(source, shape, target, target_shape):    
+#     shape = np.array(shape, dtype='int')
+
+#     p1 = middle_point(shape[0], shape[1])
+#     p2 = middle_point(shape[2], shape[3])
+#     vw = [a-b for a,b in zip(p2, p1)]
+#     w = math.sqrt(vw[0]**2+vw[1]**2)
+#     tp1 = middle_point(target_shape[36], target_shape[39])
+#     tp2 = middle_point(target_shape[42], target_shape[45])
+#     # tp1 = target_shape[36:42].mean(axis=0).astype('int')
+#     # tp2 = target_shape[42:48].mean(axis=0).astype('int')
+#     tvw = [a-b for a,b in zip(tp2, tp1)]
+#     tw = math.sqrt(tvw[0]**2+tvw[1]**2)
+#     scale = w/tw
+#     target = cv2.resize(target, None, fx=scale, fy=scale)
+#     target_shape[:,:] = target_shape[:,:]*scale
+
+#     span_target = np.zeros(shape=source.shape, dtype='uint8')
+#     ctp = middle_point(target_shape[51], target_shape[57])
+#     l = math.sqrt(sum([x**2 for x in ctp-target_shape[33]]))
+#     v = shape[4] - middle_point(middle_point(shape[0], shape[1]), middle_point(shape[2], shape[3]))
+#     th = math.atan(v[1]/v[0])
+#     v = v / math.sqrt(sum([x**2 for x in v]))
+#     v = (int(round(l*math.cos(th)*v[0])), abs(int(round(l*math.sin(th)*v[1]))))
+#     cp = shape[4] + v
+#     hs=cp[1]-ctp[1] if cp[1]-ctp[1]>=0 else 0
+#     he=cp[1]-ctp[1]+target.shape[0] if cp[1]-ctp[1]+target.shape[0]<=span_target.shape[0] else span_target.shape[0]
+#     ws=cp[0]-ctp[0] if cp[0]-ctp[0]>=0 else 0
+#     we=cp[0]-ctp[0]+target.shape[1] if cp[0]-ctp[0]+target.shape[1]<=span_target.shape[1] else span_target.shape[1]
+#     span_target[hs:he, ws:we] = target[0:he-hs,0:we-ws]
+#     for s in target_shape:
+#         s += [cp[0]-ctp[0], cp[1]-ctp[1]]
+    
+#     mask = np.zeros(shape=span_target.shape[:2], dtype='float')
+#     (tx, ty, tw, th) = get_rect(target_shape[2:15])
+#     (mx, my, mw, mh) = get_rect(target_shape[48:60])
+#     padding = 15
+#     (x, y, w, h) = (mx-padding, my-padding, mw+2*padding, mh+2*padding)
+#     if tx>x: x=tx
+#     if ty>y: y=ty
+#     if x+w>x+tw: w=tw
+#     if y+h>y+th: h=th
+#     for i in range(y, y+h):
+#         for j in range(x, x+w):
+#             d=1
+#             l=0
+#             if i<=my and j<=mx:
+#                 # d=1
+#                 if mx-j < my-i:
+#                     d = math.sqrt((j-mx)**2 + (my-y)**2)
+#                 else:
+#                     d = math.sqrt((x-mx)**2 + (my-i)**2)
+#                 # d = math.sqrt((x-mx)**2 + (y-my)**2)
+#                 l = math.sqrt((j-mx)**2 + (i-my)**2)
+#             elif i<=my and j>=mx+mw:
+#                 # d=1
+#                 if j-(mx+mw) < my-i:
+#                     d = math.sqrt((j-mx-mw)**2 + (my-y)**2)
+#                 else:
+#                     d = math.sqrt((x+w-mx-mw)**2 + (my-i)**2)
+#                 # d = math.sqrt((x+w-mx-mw)**2 + (y-my)**2)
+#                 l = math.sqrt((j-mx-mw)**2 + (i-my)**2)
+#             elif i>=my+mh and j<=mx:
+#                 # d=1
+#                 # if mx-j < i-(my+mh):
+#                 #     d = math.sqrt((j-mx)**2 + (y+h-my-mh)**2)
+#                 # else:
+#                 #     d = math.sqrt((x-mx)**2 + (i-my-mh)**2)
+#                 # d = math.sqrt((x-mx)**2 + (y+h-my-mh)**2)
+#                 d = math.sqrt(((x-mx)/2)**2 + ((y+h-my-mh)/2)**2)
+#                 l = math.sqrt((j-mx)**2 + (i-my-mh)**2)
+#             elif i>=my+mh and j>=mx+mw:
+#                 # d=1
+#                 # if j-(mx+mw) < i-(my+mh):
+#                 #     d = math.sqrt((j-mx-mw)**2 + (y+h-my-mh)**2)
+#                 # else:
+#                 #     d = math.sqrt((x+w-mx-mw)**2 + (i-my-mh)**2)
+#                 # d = math.sqrt((x+w-mx-mw)**2 + (y+h-my-mh)**2)
+#                 d = math.sqrt(((x+w-mx-mw)/2)**2 + ((y+h-my-mh)/2)**2)
+#                 l = math.sqrt((j-mx-mw)**2 + (i-my-mh)**2)
+#             elif i < my:
+#                 d = my - y
+#                 l = my - i
+#             elif i > my+mh:
+#                 # d=1
+#                 d = y+h-my-mh
+#                 l = i-my-mh
+#             elif j < mx:
+#                 d = mx - x
+#                 l = mx - j
+#             elif j > mx+mw:
+#                 d = x+w-mx-mw
+#                 l = j-mx-mw
+#             ca = l/d
+#             ta = (d-l)/d
+#             if ta<0: ta=0
+#             mask[i, j] = ta
+            
+
+#     copy = np.copy(source)    
+
+
+#     # 타겟이미지를 회전하여 source이미지와 각도를 맞춘다.
+#     ta1, ta0 = linear_reg(target_shape[36:48][:, 0], target_shape[36:48][:, 1])
+#     trp1 = (0, ta0)
+#     trp2 = (1, ta1+ta0)
+#     a1, a0 = linear_reg(shape[0:4][:, 0], shape[0:4][:, 1])
+#     rp1 = (0, a0)
+#     rp2 = (1, a1+a0)
+#     angle = get_rotate_angle(trp1, trp2) - get_rotate_angle(rp1, rp2)
+
+#     rotate_matrix = cv2.getRotationMatrix2D(tuple(shape[4]), angle, 1)
+#     span_target = cv2.warpAffine(span_target, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
+#     mask = cv2.warpAffine(mask, rotate_matrix, tuple(np.flip(span_target.shape[:2])))
+#     target_shape = get_rotate_point(tuple(shape[4]), rotate_matrix[:, :2], target_shape)
+    
+#     mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+#     mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
+#     mask = cv2.bitwise_and(mask, mask, mask=mm)
+
+#     span_target[:,:,0] = span_target[:,:,0]*mask
+#     span_target[:,:,1] = span_target[:,:,1]*mask
+#     span_target[:,:,2] = span_target[:,:,2]*mask
+
+#     mask = 1-mask
+#     copy[:,:,0] = copy[:,:,0]*mask
+#     copy[:,:,1] = copy[:,:,1]*mask
+#     copy[:,:,2] = copy[:,:,2]*mask
+
+#     copy = cv2.add(copy, span_target)
+
+
+#     return copy
 
 # OpenCV
 cap = cv2.VideoCapture(0)
@@ -265,8 +504,10 @@ cap.set(cv2.CAP_PROP_FPS, 15)
 flag = False
 target_idx = 0
 # target_list = glob.glob('../data/ljw/test/images/'+'/**/*.*', recursive=True)
-target_list = glob.glob('../data/ljw/test/0612land/img'+'/**/*.*', recursive=True)
+target_list = glob.glob('../data/ljw/images/img'+'/**/*.*', recursive=True)
+txt_list = glob.glob('../data/ljw/images/txt'+'/**/*.*', recursive=True)
 target_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
+txt_list.sort(key=lambda file : int(os.path.basename(file)[:len(os.path.basename(file))-4]))
 
 window = tk.Tk()
 window.bind('<Escape>', lambda e: window.quit())
@@ -312,16 +553,14 @@ def show_frame():
                     int(3/2*rect[2]) if int(3/2*rect[2])<=w else w, \
                     int(3/2*rect[3]) if int(3/2*rect[3])<=h else h)
 
-        cv2.rectangle(frame, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), (255, 0, 0), 1)
-        
-
         if flag:
             # target = cv2.imread('./data/jland/img/3.jpg')
             target = cv2.imread(target_list[target_idx])
             target_shape = np.zeros((69, 2), dtype='int')
 
             # f = open('./data/jland/txt/3.txt')
-            f = open(os.path.dirname(target_list[target_idx])+'/../txt/'+os.path.basename(target_list[target_idx])[:len(os.path.basename(target_list[target_idx]))-4]+'.txt')
+            # f = open(os.path.dirname(target_list[target_idx])+'/../txt/'+os.path.basename(target_list[target_idx])[:len(os.path.basename(target_list[target_idx]))-4]+'.txt')
+            f = open(txt_list[target_idx])
             line = f.readline()
             p = line.split(' ')
             w = int(p[0])
@@ -339,10 +578,11 @@ def show_frame():
             target_shape[:,0] = np.dot(target_shape[:,0], w/256)
             target_shape[:,1] = np.dot(target_shape[:,1], h/256)
 
-            dst = patch_lip(frame, shape, target, target_shape)
+            dst = patch_lip(frame, shape, target, target_shape)        
         else:
             dst = frame
 
+        cv2.rectangle(frame, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), (255, 0, 0), 1)
         ret = np.concatenate((frame, dst), axis=1)
 
         target_idx+=1

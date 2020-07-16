@@ -40,9 +40,24 @@ P3D_RIGHT_EYE = np.float32([-20.0, -65.5,-5.0]) #36
 P3D_RIGHT_TEAR = np.float32([-10.0, -40.5,-5.0]) #39
 P3D_LEFT_TEAR = np.float32([-10.0, 40.5,-5.0]) #42
 P3D_LEFT_EYE = np.float32([-20.0, 65.5,-5.0]) #45
+P3D_STOMION = np.float32([10.0, 0.0, -75.0]) #62
 #P3D_LIP_RIGHT = np.float32([-20.0, 65.5,-5.0]) #48
 #P3D_LIP_LEFT = np.float32([-20.0, 65.5,-5.0]) #54
-P3D_STOMION = np.float32([10.0, 0.0, -75.0]) #62
+# P3D_RIGHT_SIDE = np.float32([-110.0, -77.5, 70.0]) #0
+# P3D_GONION_RIGHT = np.float32([-120.0, -77.5, -10.0]) #4
+# P3D_MENTON = np.float32([-10.0, 0.0, -47.7]) #8
+# P3D_GONION_LEFT = np.float32([-120.0, 77.5, -10.0]) #12
+# P3D_LEFT_SIDE = np.float32([-110.0, 77.5, 70.0]) #16
+# P3D_FRONTAL_BREADTH_RIGHT = np.float32([-30.0, -56.1, 85.0]) #17
+# P3D_FRONTAL_BREADTH_LEFT = np.float32([-30.0, 56.1, 85.0]) #26
+# P3D_SELLION = np.float32([-10.0, 0.0, 75.0]) #27
+# P3D_NOSE = np.float32([11.1, 0.0, 27.0]) #30
+# P3D_SUB_NOSE = np.float32([-5.0, 0.0, -23.0]) #33
+# P3D_RIGHT_EYE = np.float32([-30.0, -65.5, 70.0]) #36
+# P3D_RIGHT_TEAR = np.float32([-20.0, -40.5, 70.0]) #39
+# P3D_LEFT_TEAR = np.float32([-20.0, 40.5, 70.0]) #42
+# P3D_LEFT_EYE = np.float32([-30.0, 65.5, 70.0]) #45
+# P3D_STOMION = np.float32([0.0, 0.0, 0.0]) #62
 
 TRACKED_POINTS = (0, 4, 8, 12, 16, 17, 26, 27, 30, 33, 36, 39, 42, 45, 62)
 
@@ -64,7 +79,7 @@ def get_face(img, rect):
     # 얼굴 인식 향상을 위해 Contrast Limited Adaptive Histogram Equalization
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     adaptive = clahe.apply(gray)
-    ratio = 1/3
+    ratio = 1/2
     adaptive_resize = cv2.resize(adaptive, None, fx=ratio, fy=ratio)
 
     #### detect face and shape
@@ -72,7 +87,7 @@ def get_face(img, rect):
     rects = detector(adaptive_resize, 1)
     if len(rects) == 0:
         # print('error finding face')
-        return (), []
+        return []
 
     rects[0] = dlib.scale_rect(rects[0], 1/ratio)
     (rx, ry, rw, rh) = face_utils.rect_to_bb(rects[0])
@@ -83,7 +98,7 @@ def get_face(img, rect):
     shape = face_utils.shape_to_np(shape)
     for s in shape:
         s += (x, y)
-    return (rx+x, ry+y, rw, rh), shape
+    return shape
 
 def get_rotate_angle(p1, p2):
     dx = p2[0] - p1[0]
@@ -107,7 +122,7 @@ def linear_reg(x, y):
     a0 = ymean - a1*xmean
     return a1, a0
 
-def rotateImage(input, alpha, beta, gamma, dx, dy, dz):
+def rotateImage(input, alpha=0, beta=0, gamma=0, dx=0, dy=0, dz=0, rotation_matrix=None):
     alpha = (alpha)*math.pi/180
     beta = (beta)*math.pi/180
     gamma = (gamma)*math.pi/180
@@ -126,24 +141,32 @@ def rotateImage(input, alpha, beta, gamma, dx, dy, dz):
                     [0, 1, -h/2],
                     [0, 0,    0],
                     [0, 0,    1]])
-    # Rotation matrices around the X, Y, and Z axis
-    RX = np.array([
-                    [1,               0,                0, 0],
-                    [0, math.cos(alpha), -math.sin(alpha), 0],
-                    [0, math.sin(alpha),  math.cos(alpha), 0],
-                    [0,               0,                0, 1]])
-    RY = np.array([
-                    [math.cos(beta), 0, -math.sin(beta), 0],
-                    [             0, 1,               0, 0],
-                    [math.sin(beta), 0,  math.cos(beta), 0],
-                    [             0, 0,               0, 1]])
-    RZ = np.array([
-                    [math.cos(gamma), -math.sin(gamma), 0, 0],
-                    [math.sin(gamma),  math.cos(gamma), 0, 0],
-                    [              0,                0, 1, 0],
-                    [              0,                0, 0, 1]])
-    # Composed rotation matrix with (RX, RY, RZ)
-    R = np.dot(np.dot(RX,RY), RZ)
+    if rotation_matrix is not None:
+        # Composed rotation matrix with (RX, RY, RZ)
+        R = np.zeros((4, 4))
+        R[:3, :3] = rotation_matrix
+        R[3, 3] = 1
+        # R = rotation_matrix
+    else :
+        # Rotation matrices around the X, Y, and Z axis
+        RX = np.array([
+                        [1,               0,                0, 0],
+                        [0, math.cos(alpha), -math.sin(alpha), 0],
+                        [0, math.sin(alpha),  math.cos(alpha), 0],
+                        [0,               0,                0, 1]])
+        RY = np.array([
+                        [math.cos(beta), 0, -math.sin(beta), 0],
+                        [             0, 1,               0, 0],
+                        [math.sin(beta), 0,  math.cos(beta), 0],
+                        [             0, 0,               0, 1]])
+        RZ = np.array([
+                        [math.cos(gamma), -math.sin(gamma), 0, 0],
+                        [math.sin(gamma),  math.cos(gamma), 0, 0],
+                        [              0,                0, 1, 0],
+                        [              0,                0, 0, 1]])
+        # Composed rotation matrix with (RX, RY, RZ)
+        R = np.dot(np.dot(RX,RY), RZ)
+
     # Translation matrix
     T = np.array([
                     [1, 0, 0, dx],
@@ -157,46 +180,60 @@ def rotateImage(input, alpha, beta, gamma, dx, dy, dz):
                     [0, 0,   1, 0]])
     # Final transformation matrix
     trans = np.dot(A2, np.dot(T, np.dot(R, A1)))
+
     # Apply matrix transformation
-    return cv2.warpPerspective(input, trans, (w, h))
+    output = cv2.warpPerspective(input, trans, (w, h))
+    return output
 
 
 
-def patch_lip(source, shape, target, target_shape):    
+def patch_lip(source, shape, target, target_shape, trr):    
     shape = np.array(shape, dtype='int')
 
-    # p1 = middle_point(shape[0], shape[1])
-    # p2 = middle_point(shape[2], shape[3])
-    p1 = middle_point(shape[36], shape[39])
-    p2 = middle_point(shape[42], shape[45])
+    # theta = 1.5*(trr-2.13)
+    rm = np.zeros((3, 3))
+    # trr[0] = -trr[0]
+    # trr[1] = -trr[1]
+    # trr[2] = -trr[2]
+    # trr[0] += 1.57
+    # trr[1] -= 0.785
+    # trr[2] -= 0.785
+    cv2.Rodrigues(trr, rm)
+    # print(trr)
+    print(rm)
+    p1 = shape[48]
+    p2 = shape[54]
     vw = [a-b for a,b in zip(p2, p1)]
     w = math.sqrt(vw[0]**2+vw[1]**2)
-    tp1 = middle_point(target_shape[36], target_shape[39])
-    tp2 = middle_point(target_shape[42], target_shape[45])
-    # tp1 = target_shape[36:42].mean(axis=0).astype('int')
-    # tp2 = target_shape[42:48].mean(axis=0).astype('int')
+    # w = w/math.cos(theta)
+    tp1 = target_shape[48]
+    tp2 = target_shape[54]
     tvw = [a-b for a,b in zip(tp2, tp1)]
     tw = math.sqrt(tvw[0]**2+tvw[1]**2)
     scale = w/tw
     target = cv2.resize(target, None, fx=scale, fy=scale)
     target_shape[:,:] = target_shape[:,:]*scale
 
-    target_r = rotateImage(target, 0, 45, 0, 0, 0, 0)
-    cv2.imshow('assd', target_r)
-    while(True):
-        if(cv2.waitKey(10) != -1):
-            break
+    rp = middle_point(target_shape[48], target_shape[54])
+    target = rotateImage(target, rotation_matrix=rm)
+    target = rotateImage(target, alpha = 0, beta = -45, gamma = -90)
+    # target = rotateImage(target, alpha = 0.785)
+    # cv2.imshow('asds', target)
+    # while(True):
+    #     if cv2.waitKey(1)!=-1:
+    #         break
 
     span_target = np.zeros(shape=source.shape, dtype='uint8')
-    ctp = middle_point(target_shape[51], target_shape[57])
+    ctp = middle_point(target_shape[48], target_shape[54])
     l = math.sqrt(sum([x**2 for x in ctp-target_shape[33]]))
     # v = shape[4] - middle_point(middle_point(shape[0], shape[1]), middle_point(shape[2], shape[3]))
-    v = shape[33] - middle_point(middle_point(shape[36], shape[39]), middle_point(shape[42], shape[45]))
-    th = math.atan(v[1]/v[0])
-    v = v / math.sqrt(sum([x**2 for x in v]))
-    v = (int(round(l*math.cos(th)*v[0])), abs(int(round(l*math.sin(th)*v[1]))))
+    # v = middle_point(shape[48], shape[54]) - shape[33]
+    # th = math.atan(v[1]/v[0])
+    # v = v / math.sqrt(sum([x**2 for x in v]))
+    # v = (int(round(l*math.cos(th)*v[0])), abs(int(round(l*math.sin(th)*v[1]))))
     # cp = shape[4] + v
-    cp = shape[33] + v
+    # cp = shape[33] + v
+    cp = middle_point(shape[48], shape[54])
     hs=cp[1]-ctp[1] if cp[1]-ctp[1]>=0 else 0
     he=cp[1]-ctp[1]+target.shape[0] if cp[1]-ctp[1]+target.shape[0]<=span_target.shape[0] else span_target.shape[0]
     ws=cp[0]-ctp[0] if cp[0]-ctp[0]>=0 else 0
@@ -204,6 +241,10 @@ def patch_lip(source, shape, target, target_shape):
     span_target[hs:he, ws:we] = target[0:he-hs,0:we-ws]
     for s in target_shape:
         s += [cp[0]-ctp[0], cp[1]-ctp[1]]
+    # cv2.imshow('asd', span_target)
+    # while(True):
+    #     if cv2.waitKey(1)!=-1:
+    #         break
     
     mask = np.zeros(shape=span_target.shape[:2], dtype='float')
     (tx, ty, tw, th) = get_rect(target_shape[2:15])
@@ -291,6 +332,11 @@ def patch_lip(source, shape, target, target_shape):
     # target_shape = get_rotate_point(tuple(shape[4]), rotate_matrix[:, :2], target_shape)
     target_shape = get_rotate_point(tuple(shape[33]), rotate_matrix[:, :2], target_shape)
     
+
+    mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
+    mm = cv2.fillPoly(mm, [shape[2:15]], 255)
+    mask = cv2.bitwise_and(mask, mask, mask=mm)
+
     mm = np.zeros(shape=span_target.shape[:2], dtype='uint8')
     mm = cv2.fillPoly(mm, [target_shape[2:15]], 255)
     mask = cv2.bitwise_and(mask, mask, mask=mm)
@@ -355,17 +401,47 @@ def show_frame():
 
     if pre_face is None:
         pre_face = (0, 0, w, h)
-    rect, shape = get_face(frame, pre_face)
+    shape = get_face(frame, pre_face)
     # print(frame.shape)
     # if len(shape)==0: continue
     ret = None
     if len(shape)!=0:
+        rect = get_rect(shape)
         pre_face = (rect[0]-int(rect[2]/4) if rect[0]-int(rect[2]/4)>=0 else 0, \
                     rect[1]-int(rect[3]/4) if rect[1]-int(rect[3]/4)>=0 else 0, \
                     int(3/2*rect[2]) if int(3/2*rect[2])<=w else w, \
                     int(3/2*rect[3]) if int(3/2*rect[3])<=h else h)
 
         cv2.rectangle(frame, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), (255, 0, 0), 1)
+
+        jaw = shape[0:17]
+        left_eyebrow = shape[22:27]
+        right_eyebrow = shape[17:22]
+        nose_bridge = shape[27:31]
+        lower_nose = shape[30:35]
+        left_eye = shape[42:48]
+        right_eye = shape[36:42]
+        outer_lip = shape[48:60]
+        inner_lip = shape[60:68]
+        jaw = shape[0:17]
+        left_eyebrow = shape[22:27]
+        right_eyebrow = shape[17:22]
+        nose_bridge = shape[27:31]
+        lower_nose = shape[30:35]
+        left_eye = shape[42:48]
+        right_eye = shape[36:42]
+        outer_lip = shape[48:60]
+        inner_lip = shape[60:68]
+
+        cv2.polylines(frame, [jaw], False, (0, 0, 0), 1)
+        cv2.polylines(frame, [left_eyebrow], False, (0, 0, 0), 1)
+        cv2.polylines(frame, [right_eyebrow], False, (0, 0, 0), 1)
+        cv2.polylines(frame, [nose_bridge], False, (0, 0, 0), 1)
+        cv2.polylines(frame, [lower_nose], False, (0, 0, 0), 1)
+        cv2.polylines(frame, [left_eye], True, (0, 0, 0), 1)
+        cv2.polylines(frame, [right_eye], True, (0, 0, 0), 1)
+        cv2.polylines(frame, [outer_lip], True, (0, 0, 0), 1)
+        cv2.polylines(frame, [inner_lip], True, (0, 0, 0), 1)
         
         size = frame.shape
 
@@ -433,21 +509,23 @@ def show_frame():
         # rotation_vector[0] =-1
         # rotation_vector[1] =1
         # rotation_vector[2] =1
+        # theta = math.sqrt(sum(x**2 for x in rotation_vector))
+        # v = [x/theta for x in rotation_vector]
 
         print("Rotation Vector:\n {0}".format(rotation_vector))
+        # print("THETA:\n {0}".format(theta))
+        # print("VV:\n {0}".format(v))
         print("Translation Vector:\n {0}".format(translation_vector))
 
 
         # Project a 3D point (0, 0, 1000.0) onto the image plane.
         # We use this to draw a line sticking out of the nose
 
-
         axis = np.float32([[100,0,0], 
                             [0,100,0], 
                             [0,0,100]])
         (imgpts, jacobian) = cv2.projectPoints(axis, rotation_vector, translation_vector, camera_matrix, dist_coeffs)
         # (nose_end_point2D, jacobian) = cv2.projectPoints(np.array([(0.0, 0.0, 1000.0)]), rotation_vector, translation_vector, camera_matrix, dist_coeffs)
-
         # for p in image_points:
         #     cv2.circle(im, (int(p[0]), int(p[1])), 3, (0,0,255), -1)
 
@@ -457,7 +535,6 @@ def show_frame():
 
         # dst = np.copy(frame)
 
-        sellion_xy = (int(image_points[7][0]), int(image_points[7][1]))
         # sellion_xy = (int(image_points[0][0]), int(image_points[0][1]))
         # cv2.line(dst, p1, p2, (255,0,0), 2)
 
@@ -484,8 +561,9 @@ def show_frame():
         target_shape[:,0] = np.dot(target_shape[:,0], w/256)
         target_shape[:,1] = np.dot(target_shape[:,1], h/256)
 
-        dst = patch_lip(frame, shape, target, target_shape)
+        dst = patch_lip(frame, shape, target, target_shape, rotation_vector)
 
+        sellion_xy = (int(image_points[7][0]), int(image_points[7][1]))
         cv2.line(dst, sellion_xy, tuple(imgpts[1].ravel()), (0,255,0), 3) #GREEN
         cv2.line(dst, sellion_xy, tuple(imgpts[2].ravel()), (255,0,0), 3) #BLUE
         cv2.line(dst, sellion_xy, tuple(imgpts[0].ravel()), (0,0,255), 3) #RED

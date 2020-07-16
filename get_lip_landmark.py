@@ -70,7 +70,7 @@ def get_face(img):
     # 얼굴 인식 향상을 위해 Contrast Limited Adaptive Histogram Equalization
     clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
     adaptive = clahe.apply(gray)
-    ratio = 1/2
+    ratio = 1/5
     adaptive_resize = cv2.resize(adaptive, None, fx=ratio, fy=ratio)
 
     #### detect face and shape
