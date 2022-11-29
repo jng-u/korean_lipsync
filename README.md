@@ -13,3 +13,5 @@ data_augumentation : 데이터 추가 // 좌우반전, 15도 기울이기, 15도
 generate_trainingdata : landmark를 저장
 --input : image folder 
 --output : output landmark folder
+
+https://www.youtube.com/watch?v=LgRZvdBqYe0&list=LLeALWjgMBAsC9tjea-3DStA&index=151
